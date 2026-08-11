@@ -10,6 +10,15 @@ interface DirectoryGroup {
 }
 
 /**
+ * A capped search that came up empty is NOT proof the item does not exist —
+ * only that it was not found in the first `cap` results. Say so, rather than
+ * asserting a negative the search never actually confirmed.
+ */
+function truncationNote(cap: number, kind: string): string {
+  return ` We stopped after checking the first ${cap} ${kind}, so this may be incomplete — pass the id directly instead of the name to skip the search.`;
+}
+
+/**
  * Resolve a Microsoft 365 group by display name or id. Names are matched
  * against the CALLER'S OWN memberships, so this can never resolve a group
  * the caller does not belong to.
@@ -18,10 +27,11 @@ export async function resolveGroup(g: GraphLike, value: string): Promise<string>
   const wanted = value.trim();
   if (GUID.test(wanted)) return wanted;
 
-  const { items } = await paginate<DirectoryGroup>(
+  const cap = 500;
+  const { items, truncated } = await paginate<DirectoryGroup>(
     g,
     '/me/memberOf?$select=id,displayName,groupTypes',
-    500
+    cap
   );
   const groups = items.filter((i) => (i.groupTypes ?? []).includes('Unified'));
   const target = wanted.toLowerCase();
@@ -39,10 +49,11 @@ export async function resolveGroup(g: GraphLike, value: string): Promise<string>
     .filter((x) => (x.displayName ?? '').toLowerCase().includes(target))
     .slice(0, 10)
     .map((x) => x.displayName);
+  const base = near.length
+    ? `You are not a member of any group named exactly "${wanted}". Did you mean: ${near.join(', ')}?`
+    : `You are not a member of any group named "${wanted}".`;
   throw new PlannerResolveError(
-    near.length
-      ? `You are not a member of any group named exactly "${wanted}". Did you mean: ${near.join(', ')}?`
-      : `You are not a member of any group named "${wanted}".`
+    base + (truncated ? truncationNote(cap, 'groups you belong to') : '')
   );
 }
 
@@ -51,18 +62,20 @@ export async function resolveBucket(g: GraphLike, planId: string, value: string)
   const wanted = value.trim();
   if (PLANNER_ID.test(wanted)) return wanted;
 
-  const { items } = await paginate<{ id: string; name?: string }>(
+  const cap = 200;
+  const { items, truncated } = await paginate<{ id: string; name?: string }>(
     g,
     `/planner/plans/${planId}/buckets`,
-    200
+    cap
   );
   const target = wanted.toLowerCase();
   const exact = items.filter((b) => (b.name ?? '').toLowerCase() === target);
 
   if (exact.length === 1) return exact[0].id;
   if (exact.length > 1) {
+    const list = exact.map((x) => `${x.name} (${x.id})`).join(', ');
     throw new PlannerResolveError(
-      `More than one bucket in this plan is named "${wanted}". Pass the bucket id instead.`
+      `More than one bucket in this plan is named "${wanted}". Pass the bucket id instead — candidates: ${list}`
     );
   }
 
@@ -71,8 +84,9 @@ export async function resolveBucket(g: GraphLike, planId: string, value: string)
       .map((b) => b.name)
       .filter(Boolean)
       .join(', ') || '(none)';
+  const base = `This plan has no bucket named "${wanted}". Available buckets: ${available}. Create one with create-planner-bucket first.`;
   throw new PlannerResolveError(
-    `This plan has no bucket named "${wanted}". Available buckets: ${available}. Create one with create-planner-bucket first.`
+    base + (truncated ? truncationNote(cap, 'buckets in this plan') : '')
   );
 }
 
@@ -98,26 +112,32 @@ export async function resolveAssignees(
     );
   }
 
-  const { items } = await paginate<{
+  const cap = 500;
+  const { items, truncated } = await paginate<{
     id: string;
     mail?: string | null;
     userPrincipalName?: string | null;
-  }>(g, `/groups/${groupId}/members?$select=id,mail,userPrincipalName,displayName`, 500);
+  }>(g, `/groups/${groupId}/members?$select=id,mail,userPrincipalName,displayName`, cap);
 
   const assignments: Record<string, unknown> = {};
   for (const raw of values) {
     const wanted = raw.trim();
+    if (!wanted) {
+      throw new PlannerResolveError(
+        'Assignee value must not be blank. Pass a group member email or a user id (GUID).'
+      );
+    }
     let id: string | undefined;
 
     if (GUID.test(wanted)) {
       id = wanted;
     } else {
       const target = wanted.toLowerCase();
-      id = items.find(
-        (m) =>
-          (m.mail ?? '').toLowerCase() === target ||
-          (m.userPrincipalName ?? '').toLowerCase() === target
-      )?.id;
+      id = items.find((m) => {
+        const mail = (m.mail ?? '').toLowerCase();
+        const upn = (m.userPrincipalName ?? '').toLowerCase();
+        return (mail !== '' && mail === target) || (upn !== '' && upn === target);
+      })?.id;
     }
 
     if (!id) {
@@ -126,8 +146,9 @@ export async function resolveAssignees(
           .map((m) => m.mail ?? m.userPrincipalName)
           .filter(Boolean)
           .join(', ') || '(none)';
+      const base = `"${raw}" is not a member of this plan's group, so they cannot be assigned. Members: ${members}`;
       throw new PlannerResolveError(
-        `"${raw}" is not a member of this plan's group, so they cannot be assigned. Members: ${members}`
+        base + (truncated ? truncationNote(cap, "this plan's group members") : '')
       );
     }
 

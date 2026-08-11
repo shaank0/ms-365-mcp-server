@@ -45,6 +45,23 @@ describe('resolveGroup', () => {
     const g = fakeGraph(GROUPS);
     await expect(resolveGroup(g, 'Global Admins')).rejects.toThrow(/not a member of any group/i);
   });
+
+  it('flags an incomplete search when truncated, but not when the search was exhaustive', async () => {
+    const untruncated = fakeGraph(GROUPS);
+    await expect(resolveGroup(untruncated, 'Finance')).rejects.not.toThrow(/incomplete/i);
+
+    const manyGroups = {
+      'GET /me/memberOf': {
+        value: Array.from({ length: 501 }, (_, i) => ({
+          id: `group-${i}`,
+          displayName: `Group ${i}`,
+          groupTypes: ['Unified'],
+        })),
+      },
+    };
+    const truncated = fakeGraph(manyGroups);
+    await expect(resolveGroup(truncated, 'Finance')).rejects.toThrow(/incomplete/i);
+  });
 });
 
 const BUCKETS = {
@@ -78,6 +95,40 @@ describe('resolveBucket', () => {
       /To Do, Doing/
     );
     expect(g.calls.every((c) => (c.options.method ?? 'GET') === 'GET')).toBe(true);
+  });
+
+  it('lists colliding bucket ids when the name is ambiguous', async () => {
+    const g = fakeGraph({
+      'GET /planner/plans/PPPPPPPPPPPPPPPPPPPPPPPPPPPP/buckets': {
+        value: [
+          { id: 'DDDDDDDDDDDDDDDDDDDDDDDDDDDD', name: 'Backlog' },
+          { id: 'EEEEEEEEEEEEEEEEEEEEEEEEEEEE', name: 'Backlog' },
+        ],
+      },
+    });
+    await expect(resolveBucket(g, 'PPPPPPPPPPPPPPPPPPPPPPPPPPPP', 'Backlog')).rejects.toThrow(
+      /DDDDDDDDDDDDDDDDDDDDDDDDDDDD.*EEEEEEEEEEEEEEEEEEEEEEEEEEEE/s
+    );
+  });
+
+  it('flags an incomplete search when truncated, but not when the search was exhaustive', async () => {
+    const untruncated = fakeGraph(BUCKETS);
+    await expect(
+      resolveBucket(untruncated, 'PPPPPPPPPPPPPPPPPPPPPPPPPPPP', 'Backlog')
+    ).rejects.not.toThrow(/incomplete/i);
+
+    const manyBuckets = {
+      'GET /planner/plans/PPPPPPPPPPPPPPPPPPPPPPPPPPPP/buckets': {
+        value: Array.from({ length: 201 }, (_, i) => ({
+          id: `bucket-${i}`,
+          name: `Bucket ${i}`,
+        })),
+      },
+    };
+    const truncated = fakeGraph(manyBuckets);
+    await expect(
+      resolveBucket(truncated, 'PPPPPPPPPPPPPPPPPPPPPPPPPPPP', 'Backlog')
+    ).rejects.toThrow(/incomplete/i);
   });
 });
 
@@ -142,5 +193,58 @@ describe('resolveAssignees', () => {
     await expect(
       resolveAssignees(g, 'PPPPPPPPPPPPPPPPPPPPPPPPPPPP', ['will@kw-corp.com'])
     ).rejects.toThrow(/no group container/i);
+  });
+
+  it('rejects a blank assignee value instead of matching it to a random member', async () => {
+    const g = fakeGraph(PLAN_AND_MEMBERS);
+    await expect(resolveAssignees(g, 'PPPPPPPPPPPPPPPPPPPPPPPPPPPP', ['   '])).rejects.toThrow(
+      /blank/i
+    );
+  });
+
+  it('never matches a member with neither mail nor userPrincipalName', async () => {
+    const g = fakeGraph({
+      'GET /planner/plans/PPPPPPPPPPPPPPPPPPPPPPPPPPPP': {
+        id: 'PPPPPPPPPPPPPPPPPPPPPPPPPPPP',
+        container: { containerId: '11111111-1111-1111-1111-111111111111', type: 'group' },
+      },
+      'GET /groups/11111111-1111-1111-1111-111111111111/members': {
+        value: [
+          { id: 'dddddddd-dddd-dddd-dddd-dddddddddddd', mail: null, userPrincipalName: null },
+          {
+            id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+            mail: 'will@kw-corp.com',
+            userPrincipalName: 'will@kw-corp.com',
+          },
+        ],
+      },
+    });
+    const result = await resolveAssignees(g, 'PPPPPPPPPPPPPPPPPPPPPPPPPPPP', ['will@kw-corp.com']);
+    expect(Object.keys(result)).toEqual(['aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa']);
+  });
+
+  it('flags an incomplete search when truncated, but not when the search was exhaustive', async () => {
+    const untruncated = fakeGraph(PLAN_AND_MEMBERS);
+    await expect(
+      resolveAssignees(untruncated, 'PPPPPPPPPPPPPPPPPPPPPPPPPPPP', ['ghost@nowhere.com'])
+    ).rejects.not.toThrow(/incomplete/i);
+
+    const manyMembers = {
+      'GET /planner/plans/PPPPPPPPPPPPPPPPPPPPPPPPPPPP': {
+        id: 'PPPPPPPPPPPPPPPPPPPPPPPPPPPP',
+        container: { containerId: '11111111-1111-1111-1111-111111111111', type: 'group' },
+      },
+      'GET /groups/11111111-1111-1111-1111-111111111111/members': {
+        value: Array.from({ length: 501 }, (_, i) => ({
+          id: `member-${i}`,
+          mail: `member${i}@kw-corp.com`,
+          userPrincipalName: `member${i}@kw-corp.com`,
+        })),
+      },
+    };
+    const truncated = fakeGraph(manyMembers);
+    await expect(
+      resolveAssignees(truncated, 'PPPPPPPPPPPPPPPPPPPPPPPPPPPP', ['ghost@nowhere.com'])
+    ).rejects.toThrow(/incomplete/i);
   });
 });
