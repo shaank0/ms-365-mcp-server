@@ -1,6 +1,10 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { z } from 'zod';
-import { deletePlannerTaskTool, createPlannerTaskTool } from '../tools/tasks.js';
+import {
+  deletePlannerTaskTool,
+  createPlannerTaskTool,
+  updatePlannerTaskTool,
+} from '../tools/tasks.js';
 import { fakeGraph, preconditionFailed } from './fake-graph.js';
 
 // A valid 28-character Planner id (matches PLANNER_ID), now that execute()
@@ -339,6 +343,187 @@ describe('create-planner-task schema', () => {
 
   it('rejects a planId containing a slash', () => {
     const result = schema.safeParse({ planId: 'abc/def', title: 'Ship it' });
+    expect(result.success).toBe(false);
+  });
+});
+
+// NOTE on route ordering: fakeGraph matches by method + endpoint PREFIX in
+// declaration order (see fake-graph.ts). "/planner/tasks/T...T" is a PREFIX
+// of "/planner/tasks/T...T/details", so for both GET and PATCH the /details
+// route MUST be declared first below - otherwise the bare-task route would
+// shadow it and a "details" call would silently be answered by the task
+// route's fixture instead, making a test assert against the wrong call.
+const UPDATE_ROUTES = {
+  [`GET /planner/tasks/${T1}/details`]: { '@odata.etag': 'W/"d1"' },
+  [`GET /planner/tasks/${T1}`]: { id: T1, title: 'Ship it', '@odata.etag': 'W/"t1"' },
+  [`PATCH /planner/tasks/${T1}/details`]: {},
+  [`PATCH /planner/tasks/${T1}`]: {},
+};
+
+describe('update-planner-task', () => {
+  it('patches the task with its own ETag', async () => {
+    const g = fakeGraph(UPDATE_ROUTES);
+    await updatePlannerTaskTool.execute({ taskId: T1, title: 'Renamed' }, { graphClient: g });
+    const patch = g.calls.find(
+      (c) => c.options.method === 'PATCH' && !c.endpoint.endsWith('/details')
+    );
+    expect(patch!.options.headers['If-Match']).toBe('W/"t1"');
+    expect(JSON.parse(patch!.options.body).title).toBe('Renamed');
+  });
+
+  it('maps status to percentComplete', async () => {
+    const g = fakeGraph(UPDATE_ROUTES);
+    await updatePlannerTaskTool.execute({ taskId: T1, status: 'complete' }, { graphClient: g });
+    const patch = g.calls.find(
+      (c) => c.options.method === 'PATCH' && !c.endpoint.endsWith('/details')
+    );
+    expect(JSON.parse(patch!.options.body).percentComplete).toBe(100);
+  });
+
+  it('accepts percentComplete: 0 and priority: 0, not silently dropped by a truthy check', async () => {
+    const g = fakeGraph(UPDATE_ROUTES);
+    await updatePlannerTaskTool.execute(
+      { taskId: T1, percentComplete: 0, priority: 0 },
+      { graphClient: g }
+    );
+    const patch = g.calls.find(
+      (c) => c.options.method === 'PATCH' && !c.endpoint.endsWith('/details')
+    );
+    const body = JSON.parse(patch!.options.body);
+    expect(body.percentComplete).toBe(0);
+    expect(body.priority).toBe(0);
+  });
+
+  it('an explicit percentComplete overrides status when both are given', async () => {
+    const g = fakeGraph(UPDATE_ROUTES);
+    await updatePlannerTaskTool.execute(
+      { taskId: T1, status: 'complete', percentComplete: 42 },
+      { graphClient: g }
+    );
+    const patch = g.calls.find(
+      (c) => c.options.method === 'PATCH' && !c.endpoint.endsWith('/details')
+    );
+    expect(JSON.parse(patch!.options.body).percentComplete).toBe(42);
+  });
+
+  it('touches only the details entity when only a description is given', async () => {
+    const g = fakeGraph(UPDATE_ROUTES);
+    await updatePlannerTaskTool.execute(
+      { taskId: T1, description: 'new text' },
+      { graphClient: g }
+    );
+    const taskPatches = g.calls.filter(
+      (c) => c.options.method === 'PATCH' && !c.endpoint.endsWith('/details')
+    );
+    expect(taskPatches.length).toBe(0);
+    const detailPatch = g.calls.find(
+      (c) => c.options.method === 'PATCH' && c.endpoint.endsWith('/details')
+    );
+    expect(JSON.parse(detailPatch!.options.body).description).toBe('new text');
+  });
+
+  it('errors when no updatable field is supplied', async () => {
+    const g = fakeGraph(UPDATE_ROUTES);
+    const result = await updatePlannerTaskTool.execute({ taskId: T1 }, { graphClient: g });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/at least one/i);
+  });
+
+  it('warns when the task updated but details failed', async () => {
+    const g = fakeGraph({
+      ...UPDATE_ROUTES,
+      [`PATCH /planner/tasks/${T1}/details`]: () => {
+        throw new Error('Microsoft Graph API error: 500 Server Error - boom');
+      },
+    });
+    const result = await updatePlannerTaskTool.execute(
+      { taskId: T1, title: 'Renamed', description: 'new text' },
+      { graphClient: g }
+    );
+    expect(result.isError).toBeUndefined();
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.warning).toMatch(/description/i);
+    expect(payload.warning).toMatch(/update-planner-task/);
+    expect(payload.warning).toMatch(new RegExp(T1));
+  });
+
+  // Discovery mode's execute-tool calls utility.execute(parameters, ctx) directly with
+  // raw, unparsed client input - no Zod runs on that path (see graph-tools.ts's
+  // execute-tool handler). Prove the runtime check in validate.ts closes that hole
+  // independently of the schema, same as delete/create-planner-task above.
+  it('rejects a traversal-style taskId even when the schema is bypassed, and never calls Graph', async () => {
+    const g = fakeGraph(UPDATE_ROUTES);
+    const result = await updatePlannerTaskTool.execute(
+      { taskId: '../../me/messages/XYZ', title: 'Renamed' },
+      { graphClient: g }
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/taskId/);
+    expect(g.calls).toHaveLength(0);
+  });
+});
+
+describe('update-planner-task confirm gate', () => {
+  const ORIGINAL = process.env.MS365_MCP_REQUIRE_CONFIRM;
+
+  afterEach(() => {
+    if (ORIGINAL === undefined) delete process.env.MS365_MCP_REQUIRE_CONFIRM;
+    else process.env.MS365_MCP_REQUIRE_CONFIRM = ORIGINAL;
+  });
+
+  it('gate off (default): updates without a confirm param', async () => {
+    delete process.env.MS365_MCP_REQUIRE_CONFIRM;
+    const g = fakeGraph(UPDATE_ROUTES);
+    const result = await updatePlannerTaskTool.execute(
+      { taskId: T1, title: 'Renamed' },
+      { graphClient: g }
+    );
+    expect(result.isError).toBeUndefined();
+    expect(g.calls.some((c) => c.options.method === 'PATCH')).toBe(true);
+  });
+
+  it('gate on: refuses without confirm: true and never touches Graph', async () => {
+    process.env.MS365_MCP_REQUIRE_CONFIRM = 'true';
+    const g = fakeGraph(UPDATE_ROUTES);
+    const result = await updatePlannerTaskTool.execute(
+      { taskId: T1, title: 'Renamed' },
+      { graphClient: g }
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/confirmation_required/);
+    expect(g.calls).toHaveLength(0);
+  });
+
+  it('gate on: proceeds with confirm: true', async () => {
+    process.env.MS365_MCP_REQUIRE_CONFIRM = 'true';
+    const g = fakeGraph(UPDATE_ROUTES);
+    const result = await updatePlannerTaskTool.execute(
+      { taskId: T1, title: 'Renamed', confirm: true },
+      { graphClient: g }
+    );
+    expect(result.isError).toBeUndefined();
+    expect(g.calls.some((c) => c.options.method === 'PATCH')).toBe(true);
+  });
+});
+
+describe('update-planner-task schema', () => {
+  const schema = z.object(updatePlannerTaskTool.buildSchema());
+
+  it('accepts a well-formed request', () => {
+    expect(schema.safeParse({ taskId: T1, title: 'Renamed' }).success).toBe(true);
+  });
+
+  it('accepts percentComplete: 0 and priority: 0', () => {
+    expect(schema.safeParse({ taskId: T1, percentComplete: 0, priority: 0 }).success).toBe(true);
+  });
+
+  it('rejects a path-traversal-style taskId', () => {
+    const result = schema.safeParse({ taskId: '../../etc/passwd', title: 'Renamed' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a taskId containing a slash', () => {
+    const result = schema.safeParse({ taskId: 'abc/def', title: 'Renamed' });
     expect(result.success).toBe(false);
   });
 });

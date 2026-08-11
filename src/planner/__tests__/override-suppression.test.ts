@@ -12,13 +12,21 @@ import type GraphClient from '../../graph-client.js';
  * the overlay's own registerTool call silently lost (McpServer throws "already
  * registered", swallowed by the try/catch around the utility-tool loop).
  *
- * update-planner-task is a REAL toolName in the generated client and REAL
- * endpoints.json (this is the exact tool Task 7 will override); this test mocks
- * ./planner/index.js — the one seam graph-tools.ts imports PLANNER_TOOLS /
- * OVERRIDDEN_TOOL_NAMES through — to simulate that override existing today, without
- * waiting for Task 7. This is deliberately NOT a test of OVERRIDDEN_TOOL_NAMES in
- * isolation: it drives the real registerGraphTools() and asserts on what actually
- * got registered on the mock MCP server.
+ * This test originally used update-planner-task as a mocked stand-in for a
+ * not-yet-written override, since at the time it was a real toolName in the
+ * generated client/endpoints.json but had no real PLANNER_TOOLS entry yet.
+ * Task 8 shipped that real override (updatePlannerTaskTool), so reusing the
+ * same name here would now just restate production behavior that
+ * update-planner-task-suppression.test.ts already covers end-to-end against
+ * the REAL PLANNER_TOOLS / OVERRIDDEN_TOOL_NAMES. To keep this file doing its
+ * original job — proving the generic suppression MECHANISM in isolation,
+ * independent of any specific collision — it now uses a synthetic tool name
+ * that has no real counterpart in the generated client or endpoints.json, and
+ * still mocks ./planner/index.js — the one seam graph-tools.ts imports
+ * PLANNER_TOOLS / OVERRIDDEN_TOOL_NAMES through — rather than driving the real
+ * module. This is deliberately NOT a test of OVERRIDDEN_TOOL_NAMES in
+ * isolation: it drives the real registerGraphTools() and asserts on what
+ * actually got registered on the mock MCP server.
  */
 
 vi.mock('../../logger.js', () => ({
@@ -31,10 +39,10 @@ vi.mock('../../generated/client.js', () => ({
   api: {
     endpoints: [
       {
-        alias: 'update-planner-task',
+        alias: 'stand-in-override-tool',
         method: 'patch',
-        path: '/planner/tasks/{plannerTask-id}',
-        description: 'Update planner task',
+        path: '/fake/stand-in/{id}',
+        description: 'Fake declarative endpoint for suppression-mechanism testing.',
         parameters: [],
       },
       {
@@ -52,10 +60,10 @@ vi.mock('../../generated/client.js', () => ({
 // fake overlay tool has to be defined inside vi.hoisted() to be visible here.
 const { fakeOverlayTool } = vi.hoisted(() => ({
   fakeOverlayTool: {
-    name: 'update-planner-task',
+    name: 'stand-in-override-tool',
     method: 'PATCH',
-    path: 'tool:update-planner-task',
-    description: 'Stand-in overlay for the real Task 7 override, for suppression testing.',
+    path: 'tool:stand-in-override-tool',
+    description: 'Synthetic overlay tool, purely for suppression-mechanism testing.',
     readOnlyHint: false,
     openWorldHint: true,
     buildSchema: () => ({}),
@@ -65,7 +73,7 @@ const { fakeOverlayTool } = vi.hoisted(() => ({
 
 vi.mock('../index.js', () => ({
   PLANNER_TOOLS: [fakeOverlayTool],
-  OVERRIDDEN_TOOL_NAMES: new Set(['update-planner-task']),
+  OVERRIDDEN_TOOL_NAMES: new Set(['stand-in-override-tool']),
 }));
 
 describe('overlay suppression of a colliding declarative endpoint', () => {
@@ -80,10 +88,10 @@ describe('overlay suppression of a colliding declarative endpoint', () => {
     // The declarative (generated-client) registration must NOT fire for the
     // overridden name - this is the assertion that fails against the old
     // endpointsData-only filter, because allEndpoints was never filtered there.
-    expect(declarativeNames).not.toContain('update-planner-task');
+    expect(declarativeNames).not.toContain('stand-in-override-tool');
 
     // The overlay must be the sole registration for that name.
-    expect(utilityNames.filter((n) => n === 'update-planner-task')).toHaveLength(1);
+    expect(utilityNames.filter((n) => n === 'stand-in-override-tool')).toHaveLength(1);
 
     // An unrelated declarative endpoint is unaffected by the override.
     expect(declarativeNames).toContain('list-mail-messages');
@@ -95,7 +103,7 @@ describe('overlay suppression of a colliding declarative endpoint', () => {
   // registration paths can't silently regress discovery mode's suppression.
   it('excludes the overridden name from buildToolsRegistry (discovery mode) too', () => {
     const registry = buildToolsRegistry(false, false);
-    expect(registry.has('update-planner-task')).toBe(false);
+    expect(registry.has('stand-in-override-tool')).toBe(false);
     expect(registry.has('list-mail-messages')).toBe(true);
   });
 });

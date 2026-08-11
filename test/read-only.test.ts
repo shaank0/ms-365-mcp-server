@@ -87,8 +87,9 @@ describe('Read-Only Mode', () => {
 
     // 1 GET graph endpoint via registerTool; parse-teams-url + download-bytes +
     // download-bytes-to-file + get-download-url + list-planner-plans utilities via
-    // tool. create-planner-plan and delete-planner-task are excluded here
-    // (readOnlyHint: false), so the count is 5 in read-only mode.
+    // tool. create-planner-plan, create-planner-task, update-planner-task and
+    // delete-planner-task are all excluded here (readOnlyHint: false), so the
+    // count is 5 in read-only mode.
     expect(mockServer.registerTool).toHaveBeenCalledTimes(1);
     expect(mockServer.tool).toHaveBeenCalledTimes(5);
 
@@ -109,9 +110,9 @@ describe('Read-Only Mode', () => {
     // 4 mocked endpoints (get-schedule skipped: workScopes only, no orgMode) + utilities
     // (parse-teams-url, download-bytes, download-bytes-to-file, get-download-url,
     // create-planner-plan, list-planner-plans, delete-planner-task,
-    // create-planner-task)
+    // create-planner-task, update-planner-task)
     expect(mockServer.registerTool).toHaveBeenCalledTimes(4);
-    expect(mockServer.tool).toHaveBeenCalledTimes(8);
+    expect(mockServer.tool).toHaveBeenCalledTimes(9);
 
     const toolCalls = mockServer.registerTool.mock.calls.map((call: unknown[]) => call[0]);
     expect(toolCalls).toContain('list-mail-messages');
@@ -144,8 +145,9 @@ describe('Read-Only Mode', () => {
 
     // 2 graph tools (list-mail-messages + get-schedule) + utilities
     // (parse-teams-url, download-bytes, download-bytes-to-file, get-download-url,
-    // list-planner-plans — create-planner-plan and delete-planner-task are
-    // excluded here (readOnlyHint: false))
+    // list-planner-plans — create-planner-plan, create-planner-task,
+    // update-planner-task and delete-planner-task are all excluded here
+    // (readOnlyHint: false))
     expect(mockServer.registerTool).toHaveBeenCalledTimes(2);
     expect(mockServer.tool).toHaveBeenCalledTimes(5);
   });

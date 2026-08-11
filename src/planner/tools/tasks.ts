@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   getEtag,
+  getJson,
   deleteWithEtag,
   patchWithEtag,
   postJson,
@@ -9,7 +10,7 @@ import {
   type GraphLike,
 } from '../graph.js';
 import { resolveBucket, resolveAssignees } from '../resolve.js';
-import { toPriority, toChecklist } from '../convert.js';
+import { toPriority, toChecklist, statusToPercent } from '../convert.js';
 import { ok, toolError, type McpResult } from '../result.js';
 import { checkConfirmGate } from '../confirm-gate.js';
 import { requirePlannerId } from '../validate.js';
@@ -185,13 +186,147 @@ export const createPlannerTaskTool: PlannerTool = {
               id: task.id,
               title: task.title,
               planId,
-              warning: `The task was created, but its ${Object.keys(detailsBody).join(' and ')} could NOT be saved: ${failure}. Read the current ETag with get-planner-task-details and apply them with update-planner-task-details, using taskId ${task.id}.`,
+              warning: `The task was created, but its ${Object.keys(detailsBody).join(' and ')} could NOT be saved: ${failure}. Retry with update-planner-task, using taskId ${task.id}.`,
             }),
           };
         }
       }
 
       return { ...ok({ id: task.id, title: task.title, planId }) };
+    } catch (err) {
+      return { ...toolError(err) };
+    }
+  },
+};
+
+export const updatePlannerTaskTool: PlannerTool = {
+  name: 'update-planner-task',
+  method: 'PATCH',
+  path: 'tool:update-planner-task',
+  description:
+    'Update a Microsoft Planner task. Any subset of fields may be given; the required ETags are fetched and applied automatically, so a 412 cannot happen. Use status "complete" to finish a task. The description and checklist live on a separate entity, which this handles internally along with its own ETag. This overrides the upstream declarative update-planner-task, which only PATCHes the raw task entity, requires a manually supplied If-Match ETag, and cannot touch the description or checklist at all.',
+  readOnlyHint: false,
+  openWorldHint: true,
+  buildSchema: () => ({
+    taskId: z
+      .string()
+      .regex(
+        PLANNER_ID,
+        'Must be a 28-character Planner task id (letters, digits, "_" or "-" only) — e.g. from list-plan-tasks. Not a path or URL.'
+      )
+      .describe('Planner task id (28-character string, e.g. from list-plan-tasks).'),
+    title: z.string().optional().describe('New task title.'),
+    bucket: z
+      .string()
+      .optional()
+      .describe(
+        'Bucket name (e.g. "To Do") or bucket id to move the task into. Must already exist in the plan.'
+      ),
+    description: z.string().optional().describe('Replacement description.'),
+    assignees: z
+      .array(z.string())
+      .optional()
+      .describe(
+        "Replacement assignee list, by email or user id. Members of the plan's group only. Pass an empty array to unassign everyone."
+      ),
+    dueDateTime: z
+      .string()
+      .optional()
+      .describe('Due date, ISO 8601 UTC, e.g. 2026-09-01T00:00:00Z.'),
+    startDateTime: z.string().optional().describe('Start date, ISO 8601 UTC.'),
+    priority: z
+      .union([z.string(), z.number()])
+      .optional()
+      .describe('urgent, important, medium, low — or an integer 0-10.'),
+    status: z
+      .string()
+      .optional()
+      .describe('complete, in-progress or not-started. Sets percentComplete to 100, 50 or 0.'),
+    percentComplete: z
+      .number()
+      .optional()
+      .describe('Explicit completion percentage, 0-100. Overrides status if both are given.'),
+    checklist: z
+      .array(
+        z.union([z.string(), z.object({ title: z.string(), checked: z.boolean().optional() })])
+      )
+      .optional()
+      .describe(
+        'Replacement checklist items, as plain strings or {title, checked} objects. Pass an empty array to clear the checklist.'
+      ),
+    confirm: z.boolean().describe(CONFIRM_PARAM_DESCRIPTION).optional(),
+  }),
+  execute: async (params, { graphClient }) => {
+    const refusal = checkConfirmGate('update-planner-task', params);
+    if (refusal) return refusal;
+    try {
+      // Second line of defense: Zod's schema regex only runs on the normal MCP
+      // registration path. Discovery mode's execute-tool calls execute() directly
+      // with raw, unparsed client input, so re-validate here too.
+      const taskId = requirePlannerId(params.taskId, 'taskId');
+      const taskEndpoint = `/planner/tasks/${taskId}`;
+      const taskBody: Record<string, unknown> = {};
+
+      // Every optional field below is tested with !== undefined, never
+      // truthiness, so that legitimate falsy values - percentComplete: 0,
+      // priority: 0, an explicit empty assignees/checklist array - are never
+      // silently dropped in favor of a stale value already on the task.
+      if (params.title !== undefined) taskBody.title = params.title;
+      if (params.dueDateTime !== undefined) taskBody.dueDateTime = params.dueDateTime;
+      if (params.startDateTime !== undefined) taskBody.startDateTime = params.startDateTime;
+      if (params.priority !== undefined) taskBody.priority = toPriority(params.priority);
+      if (params.status !== undefined) taskBody.percentComplete = statusToPercent(params.status);
+      // percentComplete is checked after status so an explicit value always wins.
+      if (params.percentComplete !== undefined) taskBody.percentComplete = params.percentComplete;
+
+      // Bucket and assignee resolution both need the plan, which lives on the task.
+      if (params.bucket !== undefined || params.assignees !== undefined) {
+        const task = await getJson<{ planId: string }>(graphClient, taskEndpoint);
+        if (params.bucket !== undefined) {
+          taskBody.bucketId = await resolveBucket(graphClient, task.planId, params.bucket);
+        }
+        if (params.assignees !== undefined) {
+          taskBody.assignments = await resolveAssignees(graphClient, task.planId, params.assignees);
+        }
+      }
+
+      const detailsBody: Record<string, unknown> = {};
+      if (params.description !== undefined) detailsBody.description = params.description;
+      if (params.checklist !== undefined) detailsBody.checklist = toChecklist(params.checklist);
+
+      if (Object.keys(taskBody).length === 0 && Object.keys(detailsBody).length === 0) {
+        throw new Error(
+          'Provide at least one field to update (title, bucket, description, assignees, dates, priority, status, percentComplete or checklist).'
+        );
+      }
+
+      if (Object.keys(taskBody).length > 0) {
+        await withEtagRetry(
+          () => getEtag(graphClient, taskEndpoint),
+          (etag) => patchWithEtag(graphClient, taskEndpoint, taskBody, etag)
+        );
+      }
+
+      if (Object.keys(detailsBody).length > 0) {
+        const failure = await applyDetails(graphClient, taskId, detailsBody);
+        if (failure) {
+          // The task fields (if any) were already saved successfully - report
+          // that as success, but never silently drop the description/checklist.
+          // Name both the unapplied fields and the task id so the caller can
+          // recover with a straight retry, no manual ETag juggling required.
+          return {
+            ...ok({
+              id: taskId,
+              updated: Object.keys(taskBody),
+              warning: `The task fields were saved, but its ${Object.keys(detailsBody).join(' and ')} could NOT be saved: ${failure}. Retry with update-planner-task, using taskId ${taskId}.`,
+            }),
+          };
+        }
+      }
+
+      return {
+        ...ok({ id: taskId, updated: [...Object.keys(taskBody), ...Object.keys(detailsBody)] }),
+      };
     } catch (err) {
       return { ...toolError(err) };
     }

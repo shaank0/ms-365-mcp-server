@@ -59,9 +59,9 @@ describe('Tool Filtering', () => {
     // 5 mocked graph endpoints via registerTool; utilities via tool
     // (parse-teams-url, download-bytes, download-bytes-to-file, get-download-url,
     // create-planner-plan, list-planner-plans, delete-planner-task,
-    // create-planner-task)
+    // create-planner-task, update-planner-task)
     expect(registerToolSpy).toHaveBeenCalledTimes(5);
-    expect(toolSpy).toHaveBeenCalledTimes(8);
+    expect(toolSpy).toHaveBeenCalledTimes(9);
     expect(registerToolSpy).toHaveBeenCalledWith(
       'list-mail-messages',
       expect.any(Object),
@@ -126,7 +126,7 @@ describe('Tool Filtering', () => {
 
     // 5 mocked endpoints + utilities (no filter applied on invalid regex)
     expect(registerToolSpy).toHaveBeenCalledTimes(5);
-    expect(toolSpy).toHaveBeenCalledTimes(8);
+    expect(toolSpy).toHaveBeenCalledTimes(9);
   });
 
   it('should combine read-only and filtering correctly', () => {
