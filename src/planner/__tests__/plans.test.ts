@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { createPlannerPlanTool, listPlannerPlansTool } from '../tools/plans.js';
 import { fakeGraph } from './fake-graph.js';
 
@@ -78,6 +78,58 @@ describe('create-planner-plan', () => {
   });
 });
 
+describe('create-planner-plan confirm gate', () => {
+  const ORIGINAL = process.env.MS365_MCP_REQUIRE_CONFIRM;
+
+  afterEach(() => {
+    if (ORIGINAL === undefined) delete process.env.MS365_MCP_REQUIRE_CONFIRM;
+    else process.env.MS365_MCP_REQUIRE_CONFIRM = ORIGINAL;
+  });
+
+  it('gate off (default): creates without a confirm param', async () => {
+    delete process.env.MS365_MCP_REQUIRE_CONFIRM;
+    const g = fakeGraph({
+      ...MEMBER_OF,
+      'POST /planner/plans': { id: 'PPPPPPPPPPPPPPPPPPPPPPPPPPPP', title: 'Q3' },
+    });
+    const result = await createPlannerPlanTool.execute(
+      { group: 'Marketing', title: 'Q3' },
+      { graphClient: g }
+    );
+    expect(result.isError).toBeUndefined();
+    expect(g.calls.some((c) => c.options.method === 'POST')).toBe(true);
+  });
+
+  it('gate on: refuses without confirm: true and never touches Graph', async () => {
+    process.env.MS365_MCP_REQUIRE_CONFIRM = 'true';
+    const g = fakeGraph({
+      ...MEMBER_OF,
+      'POST /planner/plans': { id: 'PPPPPPPPPPPPPPPPPPPPPPPPPPPP', title: 'Q3' },
+    });
+    const result = await createPlannerPlanTool.execute(
+      { group: 'Marketing', title: 'Q3' },
+      { graphClient: g }
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/confirmation_required/);
+    expect(g.calls).toHaveLength(0);
+  });
+
+  it('gate on: proceeds with confirm: true', async () => {
+    process.env.MS365_MCP_REQUIRE_CONFIRM = 'true';
+    const g = fakeGraph({
+      ...MEMBER_OF,
+      'POST /planner/plans': { id: 'PPPPPPPPPPPPPPPPPPPPPPPPPPPP', title: 'Q3' },
+    });
+    const result = await createPlannerPlanTool.execute(
+      { group: 'Marketing', title: 'Q3', confirm: true },
+      { graphClient: g }
+    );
+    expect(result.isError).toBeUndefined();
+    expect(g.calls.some((c) => c.options.method === 'POST')).toBe(true);
+  });
+});
+
 describe('list-planner-plans', () => {
   it('returns plans across the caller groups with the group name attached', async () => {
     const g = fakeGraph({
@@ -125,5 +177,42 @@ describe('list-planner-plans', () => {
     const payload = JSON.parse(result.content[0].text);
     expect(payload.plans.length).toBe(1);
     expect(payload.skippedGroups).toEqual(['Locked']);
+  });
+
+  it('reports per-group plan truncation instead of silently dropping it', async () => {
+    const manyPlans = Array.from({ length: 201 }, (_, i) => ({
+      id: `PLAN${i}`.padEnd(28, '0'),
+      title: `Plan ${i}`,
+    }));
+    const g = fakeGraph({
+      ...MEMBER_OF,
+      'GET /groups/11111111-1111-1111-1111-111111111111/planner/plans': { value: manyPlans },
+    });
+    const result = await listPlannerPlansTool.execute({}, { graphClient: g });
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.plans.length).toBe(200);
+    expect(payload.truncatedGroupPlans).toMatch(/Marketing/);
+  });
+
+  it('caps the group fan-out at Unified groups, unaffected by other membership types', async () => {
+    const unifiedGroups = Array.from({ length: 65 }, (_, i) => ({
+      id: `group-${i}`,
+      displayName: `Group${i}`,
+      groupTypes: ['Unified'],
+    }));
+    const routes: Record<string, unknown> = {
+      'GET /me/memberOf': { value: unifiedGroups },
+    };
+    for (const group of unifiedGroups) {
+      routes[`GET /groups/${group.id}/planner/plans`] = { value: [] };
+    }
+    const g = fakeGraph(routes);
+    const result = await listPlannerPlansTool.execute({}, { graphClient: g });
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.truncated).toMatch(/60 of your 65/);
+    const fetchedGroups = new Set(
+      g.calls.map((c) => /^\/groups\/([^/]+)\/planner\/plans/.exec(c.endpoint)?.[1]).filter(Boolean)
+    );
+    expect(fetchedGroups.size).toBe(60);
   });
 });

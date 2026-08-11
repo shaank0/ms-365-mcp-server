@@ -2,10 +2,31 @@ import { z } from 'zod';
 import { postJson, paginate, type GraphLike } from '../graph.js';
 import { resolveGroup } from '../resolve.js';
 import { ok, toolError } from '../result.js';
+import { checkConfirmGate } from '../confirm-gate.js';
 import type { PlannerTool } from './tasks.js';
+import { CONFIRM_PARAM_DESCRIPTION } from '../../lib/param-descriptions.js';
 
-/** Cap on groups scanned by list-planner-plans, to bound the request fan-out. */
-const GROUP_SCAN_CAP = 60;
+/**
+ * Cap on directory memberships read from /me/memberOf. This is cheap — one
+ * paginated read — so it can be generous, matching resolveGroup's own cap.
+ * NOT the cap on how many groups' plans get fetched: /me/memberOf returns
+ * every directory object (security groups, directory roles, administrative
+ * units), most of which are never Planner-capable, so capping HERE first
+ * would let unrelated memberships crowd real Microsoft 365 groups out of the
+ * scan. See GROUP_FANOUT_CAP below for the cap that actually matters.
+ */
+const MEMBERSHIP_SCAN_CAP = 500;
+
+/**
+ * Cap on Unified (Microsoft 365) groups whose plans are actually fetched —
+ * applied AFTER filtering to Unified groups, not to the raw membership list.
+ * This is the expensive part (one Graph request per group), so it is the cap
+ * that bounds real cost.
+ */
+const GROUP_FANOUT_CAP = 60;
+
+/** Cap on plans read per group. */
+const PLANS_PER_GROUP_CAP = 200;
 
 export const createPlannerPlanTool: PlannerTool = {
   name: 'create-planner-plan',
@@ -26,8 +47,11 @@ export const createPlannerPlanTool: PlannerTool = {
       .array(z.string())
       .optional()
       .describe('Optional bucket (column) names to create in the plan, in order.'),
+    confirm: z.boolean().describe(CONFIRM_PARAM_DESCRIPTION).optional(),
   }),
   execute: async (params, { graphClient }) => {
+    const refusal = checkConfirmGate('create-planner-plan', params);
+    if (refusal) return refusal;
     try {
       const groupId = await resolveGroup(graphClient, params.group);
       const plan = await postJson<{ id: string; title: string }>(graphClient, '/planner/plans', {
@@ -78,22 +102,26 @@ export const listPlannerPlansTool: PlannerTool = {
   buildSchema: () => ({}),
   execute: async (_params, { graphClient }) => {
     try {
-      const { items, truncated } = await paginate<{
+      const { items, truncated: membershipTruncated } = await paginate<{
         id: string;
         displayName?: string;
         groupTypes?: string[];
-      }>(graphClient, '/me/memberOf?$select=id,displayName,groupTypes', GROUP_SCAN_CAP);
+      }>(graphClient, '/me/memberOf?$select=id,displayName,groupTypes', MEMBERSHIP_SCAN_CAP);
 
-      const groups = items.filter((i) => (i.groupTypes ?? []).includes('Unified'));
+      const unifiedGroups = items.filter((i) => (i.groupTypes ?? []).includes('Unified'));
+      const groups = unifiedGroups.slice(0, GROUP_FANOUT_CAP);
+      const groupsTruncated = unifiedGroups.length > GROUP_FANOUT_CAP;
+
       const plans: Array<{ id: string; title: string; group: string; groupId: string }> = [];
       const skippedGroups: string[] = [];
+      const groupsWithMorePlans: string[] = [];
 
       for (const group of groups) {
         try {
           const page = await paginate<{ id: string; title?: string }>(
             graphClient,
             `/groups/${group.id}/planner/plans`,
-            200
+            PLANS_PER_GROUP_CAP
           );
           for (const plan of page.items) {
             plans.push({
@@ -103,6 +131,9 @@ export const listPlannerPlansTool: PlannerTool = {
               groupId: group.id,
             });
           }
+          if (page.truncated) {
+            groupsWithMorePlans.push(group.displayName ?? group.id);
+          }
         } catch {
           skippedGroups.push(group.displayName ?? group.id);
         }
@@ -111,9 +142,19 @@ export const listPlannerPlansTool: PlannerTool = {
       return ok({
         plans,
         ...(skippedGroups.length ? { skippedGroups } : {}),
-        ...(truncated
+        ...(groupsWithMorePlans.length
           ? {
-              truncated: `Only the first ${GROUP_SCAN_CAP} groups were scanned; you belong to more. Plans in the remaining groups are not listed.`,
+              truncatedGroupPlans: `These groups have more than ${PLANS_PER_GROUP_CAP} plans; only the first ${PLANS_PER_GROUP_CAP} are listed for each: ${groupsWithMorePlans.join(', ')}.`,
+            }
+          : {}),
+        ...(groupsTruncated
+          ? {
+              truncated: `Only the first ${GROUP_FANOUT_CAP} of your ${unifiedGroups.length} Microsoft 365 groups were scanned; plans in the remaining groups are not listed.`,
+            }
+          : {}),
+        ...(membershipTruncated
+          ? {
+              truncatedMemberships: `Only the first ${MEMBERSHIP_SCAN_CAP} directory memberships were checked; you may belong to Microsoft 365 groups beyond those, which were not considered.`,
             }
           : {}),
       });
