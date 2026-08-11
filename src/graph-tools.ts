@@ -12,11 +12,23 @@ import AuthManager, {
 } from './auth.js';
 import { api } from './generated/client.js';
 import { api as betaApi } from './generated/client-beta.js';
+import { PLANNER_TOOLS, OVERRIDDEN_TOOL_NAMES } from './planner/index.js';
 
 // Tools from every Graph API version share one registry. Each tool's version is carried
 // by its endpoints.json config (apiVersion), so the generated clients stay version-agnostic
 // and the runtime picks the URL prefix per request. v1.0 endpoints are unchanged.
-const allEndpoints = [...api.endpoints, ...betaApi.endpoints];
+//
+// Overridden names (this fork's src/planner/ tools) are filtered out HERE, at the one
+// list both registerGraphTools and buildToolsRegistry iterate, rather than out of
+// endpointsData below. endpointsData is a metadata lookup keyed by toolName, not the
+// registration source - filtering it left the declarative tool registered (with a
+// degraded, config-less registration) while our overlay's registerTool call threw
+// "already registered" and was silently swallowed. Filtering allEndpoints instead means
+// the declarative entry never reaches either registration loop, so there is only ever
+// one owner of an overridden name.
+const allEndpoints = [...api.endpoints, ...betaApi.endpoints].filter(
+  (tool) => !OVERRIDDEN_TOOL_NAMES.has(tool.alias)
+);
 import { z } from 'zod';
 import { readFileSync } from 'fs';
 import { access } from 'fs/promises';
@@ -54,7 +66,6 @@ import {
   getAccountParamDescription,
   getFetchAllPagesParamDescription,
 } from './lib/param-descriptions.js';
-import { PLANNER_TOOLS, OVERRIDDEN_TOOL_NAMES } from './planner/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -86,9 +97,9 @@ interface EndpointConfig {
   requestBodySchema?: Record<string, unknown>;
 }
 
-const endpointsData = (
-  JSON.parse(readFileSync(path.join(__dirname, 'endpoints.json'), 'utf8')) as EndpointConfig[]
-).filter((endpoint) => !OVERRIDDEN_TOOL_NAMES.has(endpoint.toolName));
+const endpointsData = JSON.parse(
+  readFileSync(path.join(__dirname, 'endpoints.json'), 'utf8')
+) as EndpointConfig[];
 
 /**
  * Prefix beta-version tools with a [beta] marker so the instability is visible in the

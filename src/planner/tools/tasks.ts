@@ -1,6 +1,8 @@
 import { z } from 'zod';
-import { getEtag, deleteWithEtag, withEtagRetry, type GraphLike } from '../graph.js';
+import { getEtag, deleteWithEtag, withEtagRetry, PLANNER_ID, type GraphLike } from '../graph.js';
 import { ok, toolError, type McpResult } from '../result.js';
+import { checkConfirmGate } from '../confirm-gate.js';
+import { CONFIRM_PARAM_DESCRIPTION } from '../../lib/param-descriptions.js';
 
 export interface PlannerTool {
   name: string;
@@ -32,9 +34,16 @@ export const deletePlannerTaskTool: PlannerTool = {
   buildSchema: () => ({
     taskId: z
       .string()
+      .regex(
+        PLANNER_ID,
+        'Must be a 28-character Planner task id (letters, digits, "_" or "-" only) — e.g. from list-plan-tasks. Not a path or URL.'
+      )
       .describe('Planner task id (28-character string, e.g. from list-plan-tasks).'),
+    confirm: z.boolean().describe(CONFIRM_PARAM_DESCRIPTION).optional(),
   }),
   execute: async (params, { graphClient }) => {
+    const refusal = checkConfirmGate('delete-planner-task', params);
+    if (refusal) return refusal;
     try {
       const endpoint = `/planner/tasks/${params.taskId}`;
       await withEtagRetry(
