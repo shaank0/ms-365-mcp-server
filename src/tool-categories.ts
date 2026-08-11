@@ -86,14 +86,17 @@ const UNIVERSAL_UTILITY_TOOLS = ['download-bytes', 'download-bytes-to-file'];
 const SCOPED_UTILITY_TOOLS: Record<string, string[]> = {
   'get-download-url': ['files', 'onedrive', 'personal', 'work', 'search'],
   'parse-teams-url': ['teams', 'work'],
-  // delete-planner-task is a fork addition (src/planner/), not an endpoints.json
-  // entry, so it needs the same explicit preset membership as the other
-  // code-defined utility tools above. 'work' matches every sibling Planner
-  // endpoint in endpoints.json (list-planner-tasks, get-planner-plan,
-  // list-plan-tasks, get-planner-task, create-planner-task,
-  // update-planner-task all carry ["tasks","work"]) — without it, the work
-  // preset would surface every other Planner tool but silently omit delete.
+  // delete-planner-task, create-planner-plan and list-planner-plans are fork
+  // additions (src/planner/), not endpoints.json entries, so they need the
+  // same explicit preset membership as the other code-defined utility tools
+  // above. 'work' matches every sibling Planner endpoint in endpoints.json
+  // (list-planner-tasks, get-planner-plan, list-plan-tasks, get-planner-task,
+  // create-planner-task, update-planner-task all carry ["tasks","work"]) —
+  // without it, the work preset would surface every other Planner tool but
+  // silently omit these.
   'delete-planner-task': ['tasks', 'work'],
+  'create-planner-plan': ['tasks', 'work'],
+  'list-planner-plans': ['tasks', 'work'],
 };
 
 // Fail fast if a scoped utility references a preset that does not exist (e.g. a typo like
