@@ -1,4 +1,4 @@
-import { PLANNER_ID, GUID } from './graph.js';
+import { PLANNER_ID } from './graph.js';
 
 /**
  * Second line of defense against path-traversal-style ids, alongside the Zod
@@ -30,9 +30,4 @@ export function requirePlannerId(value: unknown, paramName: string): string {
     PLANNER_ID,
     'a 28-character Planner id (letters, digits, "_" or "-" only)'
   );
-}
-
-/** Validates a group/user id (GUID, see GUID). */
-export function requireGuid(value: unknown, paramName: string): string {
-  return requireMatch(value, paramName, GUID, 'a GUID');
 }
