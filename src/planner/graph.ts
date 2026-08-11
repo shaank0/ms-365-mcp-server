@@ -50,8 +50,24 @@ export async function deleteWithEtag(g: GraphLike, endpoint: string, etag: strin
   });
 }
 
+/**
+ * Status code parsed from the anchored prefix of a GraphClient error
+ * message, or null if the message isn't one GraphClient produced.
+ * GraphClient.makeRequest throws two shapes:
+ *   "Microsoft Graph API error: <status> <statusText> - <body>"
+ *   "Microsoft Graph API scope error: <status> <statusText> - <body>. ..."
+ * Both are handled. Anything else (network errors, etc.) returns null.
+ * Digits that merely appear inside the body (e.g. a validation message
+ * quoting "412") are never matched — only the token right after the prefix.
+ */
+export function graphStatus(err: unknown): number | null {
+  const message = err instanceof Error ? err.message : String(err);
+  const match = /^Microsoft Graph API (?:scope )?error: (\d{3})\b/.exec(message);
+  return match ? Number(match[1]) : null;
+}
+
 export function isPreconditionFailed(err: unknown): boolean {
-  return /\b412\b/.test(err instanceof Error ? err.message : String(err));
+  return graphStatus(err) === 412;
 }
 
 /**

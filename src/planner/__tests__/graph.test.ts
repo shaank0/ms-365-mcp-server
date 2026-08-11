@@ -7,10 +7,11 @@ import {
   paginate,
   isPreconditionFailed,
   withEtagRetry,
+  graphStatus,
   PLANNER_ID,
   GUID,
 } from '../graph.js';
-import { fakeGraph, preconditionFailed } from './fake-graph.js';
+import { fakeGraph, preconditionFailed, graphError, graphScopeError } from './fake-graph.js';
 
 describe('id patterns', () => {
   it('recognises a 28-char Planner id and rejects a GUID', () => {
@@ -59,6 +60,29 @@ describe('patchWithEtag / deleteWithEtag', () => {
   });
 });
 
+describe('graphStatus', () => {
+  it('parses the status from the "Microsoft Graph API error:" prefix', () => {
+    expect(graphStatus(graphError(403, 'Forbidden'))).toBe(403);
+  });
+
+  it('parses the status from the "Microsoft Graph API scope error:" prefix', () => {
+    expect(graphStatus(graphScopeError(401, 'Unauthorized'))).toBe(401);
+  });
+
+  it('does not match a digit that only appears in the body', () => {
+    const trap = graphError(
+      400,
+      'Bad Request',
+      '{"error":{"code":"BadRequest","message":"Value 412 exceeds max allowed length."}}'
+    );
+    expect(graphStatus(trap)).toBe(400);
+  });
+
+  it('returns null for a non-Graph error', () => {
+    expect(graphStatus(new Error('socket hang up'))).toBeNull();
+  });
+});
+
 describe('isPreconditionFailed', () => {
   it('detects a 412 error', () => {
     expect(isPreconditionFailed(preconditionFailed())).toBe(true);
@@ -66,6 +90,15 @@ describe('isPreconditionFailed', () => {
 
   it('ignores other errors', () => {
     expect(isPreconditionFailed(new Error('403 Forbidden'))).toBe(false);
+  });
+
+  it('does not false-positive when the body merely contains "412"', () => {
+    const trap = graphError(
+      400,
+      'Bad Request',
+      '{"error":{"code":"BadRequest","message":"Value 412 exceeds max allowed length."}}'
+    );
+    expect(isPreconditionFailed(trap)).toBe(false);
   });
 });
 
@@ -97,6 +130,18 @@ describe('withEtagRetry', () => {
     const read = vi.fn(async () => 'W/"1"');
     const write = vi.fn().mockRejectedValue(new Error('403 Forbidden'));
     await expect(withEtagRetry(read, write)).rejects.toThrow(/403/);
+    expect(write).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not retry a 400 whose body merely contains "412"', async () => {
+    const read = vi.fn(async () => 'W/"1"');
+    const trap = graphError(
+      400,
+      'Bad Request',
+      '{"error":{"code":"BadRequest","message":"Value 412 exceeds max allowed length."}}'
+    );
+    const write = vi.fn().mockRejectedValue(trap);
+    await expect(withEtagRetry(read, write)).rejects.toThrow(/400/);
     expect(write).toHaveBeenCalledTimes(1);
   });
 });

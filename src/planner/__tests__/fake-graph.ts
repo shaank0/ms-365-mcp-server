@@ -31,3 +31,19 @@ export function fakeGraph(routes: Record<string, unknown | Route>) {
 export function preconditionFailed(): Error {
   return new Error('Microsoft Graph API error: 412 Precondition Failed - {"error":{"code":""}}');
 }
+
+/**
+ * Error in the exact shape GraphClient.makeRequest throws for an arbitrary
+ * status, with an optional body — used to build traps where a digit that
+ * looks like a different status code appears inside the body text.
+ */
+export function graphError(status: number, statusText: string, body = '{"error":{}}'): Error {
+  return new Error(`Microsoft Graph API error: ${status} ${statusText} - ${body}`);
+}
+
+/** Error in the shape GraphClient.makeRequest throws for a scope error. */
+export function graphScopeError(status: number, statusText: string, body = '{"error":{}}'): Error {
+  return new Error(
+    `Microsoft Graph API scope error: ${status} ${statusText} - ${body}. This tool requires organization mode. Please restart with --org-mode flag.`
+  );
+}
