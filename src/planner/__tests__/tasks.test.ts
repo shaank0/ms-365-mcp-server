@@ -202,6 +202,13 @@ describe('create-planner-task', () => {
       { graphClient: g }
     );
     expect(result.isError).toBe(true);
+    // Discriminate the failure mode from a generic 404: the message must name
+    // the bucket that was requested AND list what actually exists in the
+    // plan, not just fail for any reason (fakeGraph 404s any unrouted call,
+    // so `isError: true` alone would pass even if the buckets route were
+    // missing or resolveBucket failed for an unrelated reason).
+    expect(result.content[0].text).toMatch(/Backlog/);
+    expect(result.content[0].text).toMatch(/To Do/);
     expect(g.calls.some((c) => c.options.method === 'POST')).toBe(false);
   });
 
@@ -218,6 +225,60 @@ describe('create-planner-task', () => {
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/planId/);
     expect(g.calls).toHaveLength(0);
+  });
+
+  // The bucket/priority/checklist tests above each pin ONE resolved value in
+  // isolation, which does not prove it landed in the RIGHT body field - e.g.
+  // a bucketId/assignments/dueDateTime/startDateTime typo in the wiring would
+  // pass every test above (resolveBucket/resolveAssignees are correct in
+  // isolation; toPriority is correct in isolation) as long as nothing reads
+  // that specific field back out of the POST body. Supply every wired field
+  // at once and assert each lands under its correct Graph body key.
+  it('wires bucket, assignees, dates and priority into the correct POST body fields', async () => {
+    const groupId = '11111111-1111-1111-1111-111111111111';
+    const memberId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+    const bucketId = 'B'.repeat(28);
+
+    const g = fakeGraph({
+      'POST /planner/tasks': { id: T1, title: 'Ship it' },
+      // Longer/more specific paths must be listed before shorter prefixes of
+      // themselves - fakeGraph matches by endpoint.startsWith(routePath), so
+      // `/planner/plans/${PLAN}` would otherwise swallow the `/buckets` call.
+      [`GET /planner/plans/${PLAN}/buckets`]: { value: [{ id: bucketId, name: 'To Do' }] },
+      [`GET /planner/plans/${PLAN}`]: {
+        id: PLAN,
+        container: { containerId: groupId, type: 'group' },
+      },
+      [`GET /groups/${groupId}/members`]: {
+        value: [{ id: memberId, mail: 'will@kw-corp.com', userPrincipalName: 'will@kw-corp.com' }],
+      },
+    });
+
+    const result = await createPlannerTaskTool.execute(
+      {
+        planId: PLAN,
+        title: 'Ship it',
+        bucket: 'To Do',
+        assignees: ['will@kw-corp.com'],
+        dueDateTime: '2026-09-01T00:00:00Z',
+        startDateTime: '2026-08-01T00:00:00Z',
+        priority: 'urgent',
+      },
+      { graphClient: g }
+    );
+    expect(result.isError).toBeUndefined();
+
+    const post = g.calls.find(
+      (c) => c.options.method === 'POST' && c.endpoint === '/planner/tasks'
+    );
+    const body = JSON.parse(post!.options.body);
+    expect(body.bucketId).toBe(bucketId);
+    expect(body.assignments).toEqual({
+      [memberId]: { '@odata.type': '#microsoft.graph.plannerAssignment', orderHint: ' !' },
+    });
+    expect(body.dueDateTime).toBe('2026-09-01T00:00:00Z');
+    expect(body.startDateTime).toBe('2026-08-01T00:00:00Z');
+    expect(body.priority).toBe(1);
   });
 });
 

@@ -156,8 +156,8 @@ export const createPlannerTaskTool: PlannerTool = {
       if (params.assignees?.length) {
         body.assignments = await resolveAssignees(graphClient, planId, params.assignees);
       }
-      if (params.dueDateTime) body.dueDateTime = params.dueDateTime;
-      if (params.startDateTime) body.startDateTime = params.startDateTime;
+      if (params.dueDateTime !== undefined) body.dueDateTime = params.dueDateTime;
+      if (params.startDateTime !== undefined) body.startDateTime = params.startDateTime;
       if (params.priority !== undefined) body.priority = toPriority(params.priority);
 
       const task = await postJson<{ id: string; title: string }>(
