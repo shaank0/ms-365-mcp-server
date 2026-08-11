@@ -54,6 +54,7 @@ import {
   getAccountParamDescription,
   getFetchAllPagesParamDescription,
 } from './lib/param-descriptions.js';
+import { PLANNER_TOOLS, OVERRIDDEN_TOOL_NAMES } from './planner/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -85,9 +86,9 @@ interface EndpointConfig {
   requestBodySchema?: Record<string, unknown>;
 }
 
-const endpointsData = JSON.parse(
-  readFileSync(path.join(__dirname, 'endpoints.json'), 'utf8')
-) as EndpointConfig[];
+const endpointsData = (
+  JSON.parse(readFileSync(path.join(__dirname, 'endpoints.json'), 'utf8')) as EndpointConfig[]
+).filter((endpoint) => !OVERRIDDEN_TOOL_NAMES.has(endpoint.toolName));
 
 /**
  * Prefix beta-version tools with a [beta] marker so the instability is visible in the
@@ -786,6 +787,7 @@ export const UTILITY_TOOLS: readonly UtilityTool[] = [
       }
     },
   },
+  ...(PLANNER_TOOLS as unknown as UtilityTool[]),
 ];
 
 function registerUtilityToolWithMcp(
