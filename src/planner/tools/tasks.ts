@@ -9,8 +9,16 @@ export interface PlannerTool {
   description: string;
   readOnlyHint: boolean;
   openWorldHint: boolean;
-  buildSchema: (ctx?: unknown) => Record<string, unknown>;
-  execute: (params: any, deps: { graphClient: GraphLike }) => Promise<McpResult>;
+  buildSchema: (ctx?: unknown) => Record<string, z.ZodTypeAny>;
+  // Intersected with an index signature (upstream's UtilityTool/CallToolResult
+  // shape requires one) so PlannerTool structurally satisfies UtilityTool with
+  // no cast at the UTILITY_TOOLS spread site in graph-tools.ts. McpResult itself
+  // (result.ts) stays untouched — execute() below produces the index signature
+  // for free by spreading ok()/toolError()'s return into a fresh object literal.
+  execute: (
+    params: any,
+    deps: { graphClient: GraphLike }
+  ) => Promise<McpResult & Record<string, unknown>>;
 }
 
 export const deletePlannerTaskTool: PlannerTool = {
@@ -33,9 +41,9 @@ export const deletePlannerTaskTool: PlannerTool = {
         () => getEtag(graphClient, endpoint),
         (etag) => deleteWithEtag(graphClient, endpoint, etag)
       );
-      return ok({ message: `Task ${params.taskId} deleted.` });
+      return { ...ok({ message: `Task ${params.taskId} deleted.` }) };
     } catch (err) {
-      return toolError(err);
+      return { ...toolError(err) };
     }
   },
 };

@@ -86,6 +86,10 @@ const UNIVERSAL_UTILITY_TOOLS = ['download-bytes', 'download-bytes-to-file'];
 const SCOPED_UTILITY_TOOLS: Record<string, string[]> = {
   'get-download-url': ['files', 'onedrive', 'personal', 'work', 'search'],
   'parse-teams-url': ['teams', 'work'],
+  // delete-planner-task is a fork addition (src/planner/), not an endpoints.json
+  // entry, so it needs the same explicit preset membership as the other
+  // code-defined utility tools above.
+  'delete-planner-task': ['tasks'],
 };
 
 // Fail fast if a scoped utility references a preset that does not exist (e.g. a typo like

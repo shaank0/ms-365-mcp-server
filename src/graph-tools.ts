@@ -787,7 +787,7 @@ export const UTILITY_TOOLS: readonly UtilityTool[] = [
       }
     },
   },
-  ...(PLANNER_TOOLS as unknown as UtilityTool[]),
+  ...PLANNER_TOOLS,
 ];
 
 function registerUtilityToolWithMcp(
