@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { getEtag, deleteWithEtag, withEtagRetry, PLANNER_ID, type GraphLike } from '../graph.js';
 import { ok, toolError, type McpResult } from '../result.js';
 import { checkConfirmGate } from '../confirm-gate.js';
+import { requirePlannerId } from '../validate.js';
 import { CONFIRM_PARAM_DESCRIPTION } from '../../lib/param-descriptions.js';
 
 export interface PlannerTool {
@@ -45,12 +46,16 @@ export const deletePlannerTaskTool: PlannerTool = {
     const refusal = checkConfirmGate('delete-planner-task', params);
     if (refusal) return refusal;
     try {
-      const endpoint = `/planner/tasks/${params.taskId}`;
+      // Second line of defense: Zod's schema regex only runs on the normal MCP
+      // registration path. Discovery mode's execute-tool calls execute() directly
+      // with raw, unparsed client input, so re-validate here too.
+      const taskId = requirePlannerId(params.taskId, 'taskId');
+      const endpoint = `/planner/tasks/${taskId}`;
       await withEtagRetry(
         () => getEtag(graphClient, endpoint),
         (etag) => deleteWithEtag(graphClient, endpoint, etag)
       );
-      return { ...ok({ message: `Task ${params.taskId} deleted.` }) };
+      return { ...ok({ message: `Task ${taskId} deleted.` }) };
     } catch (err) {
       return { ...toolError(err) };
     }

@@ -3,13 +3,18 @@ import { z } from 'zod';
 import { deletePlannerTaskTool } from '../tools/tasks.js';
 import { fakeGraph, preconditionFailed } from './fake-graph.js';
 
+// A valid 28-character Planner id (matches PLANNER_ID), now that execute()
+// re-validates params.taskId at runtime (see validate.ts) rather than only
+// trusting the Zod schema.
+const T1 = 'T'.repeat(28);
+
 describe('delete-planner-task', () => {
   it('reads the ETag then deletes with If-Match', async () => {
     const g = fakeGraph({
-      'GET /planner/tasks/T1': { id: 'T1', '@odata.etag': 'W/"1"' },
-      'DELETE /planner/tasks/T1': {},
+      [`GET /planner/tasks/${T1}`]: { id: T1, '@odata.etag': 'W/"1"' },
+      [`DELETE /planner/tasks/${T1}`]: {},
     });
-    const result = await deletePlannerTaskTool.execute({ taskId: 'T1' }, { graphClient: g });
+    const result = await deletePlannerTaskTool.execute({ taskId: T1 }, { graphClient: g });
     expect(result.isError).toBeUndefined();
     const del = g.calls.find((c) => c.options.method === 'DELETE');
     expect(del?.options.headers['If-Match']).toBe('W/"1"');
@@ -18,28 +23,46 @@ describe('delete-planner-task', () => {
   it('retries once on a 412', async () => {
     let attempts = 0;
     const g = fakeGraph({
-      'GET /planner/tasks/T1': { id: 'T1', '@odata.etag': 'W/"1"' },
-      'DELETE /planner/tasks/T1': () => {
+      [`GET /planner/tasks/${T1}`]: { id: T1, '@odata.etag': 'W/"1"' },
+      [`DELETE /planner/tasks/${T1}`]: () => {
         attempts += 1;
         if (attempts === 1) throw preconditionFailed();
         return {};
       },
     });
-    const result = await deletePlannerTaskTool.execute({ taskId: 'T1' }, { graphClient: g });
+    const result = await deletePlannerTaskTool.execute({ taskId: T1 }, { graphClient: g });
     expect(result.isError).toBeUndefined();
     expect(attempts).toBe(2);
   });
 
   it('returns a friendly error on a persistent 412', async () => {
     const g = fakeGraph({
-      'GET /planner/tasks/T1': { id: 'T1', '@odata.etag': 'W/"1"' },
-      'DELETE /planner/tasks/T1': () => {
+      [`GET /planner/tasks/${T1}`]: { id: T1, '@odata.etag': 'W/"1"' },
+      [`DELETE /planner/tasks/${T1}`]: () => {
         throw preconditionFailed();
       },
     });
-    const result = await deletePlannerTaskTool.execute({ taskId: 'T1' }, { graphClient: g });
+    const result = await deletePlannerTaskTool.execute({ taskId: T1 }, { graphClient: g });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/modified by someone else/i);
+  });
+
+  // Discovery mode's execute-tool calls utility.execute(parameters, ctx) directly with
+  // raw, unparsed client input - no Zod runs on that path (see graph-tools.ts's
+  // execute-tool handler). Prove the runtime check in validate.ts closes that hole
+  // independently of the schema.
+  it('rejects a traversal-style taskId even when the schema is bypassed, and never calls Graph', async () => {
+    const g = fakeGraph({
+      'GET /planner/tasks/': { id: 'nope' },
+      'DELETE /planner/tasks/': {},
+    });
+    const result = await deletePlannerTaskTool.execute(
+      { taskId: '../../me/messages/XYZ' },
+      { graphClient: g }
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/taskId/);
+    expect(g.calls).toHaveLength(0);
   });
 });
 
@@ -54,10 +77,10 @@ describe('delete-planner-task confirm gate', () => {
   it('gate off (default): deletes without a confirm param', async () => {
     delete process.env.MS365_MCP_REQUIRE_CONFIRM;
     const g = fakeGraph({
-      'GET /planner/tasks/T1': { id: 'T1', '@odata.etag': 'W/"1"' },
-      'DELETE /planner/tasks/T1': {},
+      [`GET /planner/tasks/${T1}`]: { id: T1, '@odata.etag': 'W/"1"' },
+      [`DELETE /planner/tasks/${T1}`]: {},
     });
-    const result = await deletePlannerTaskTool.execute({ taskId: 'T1' }, { graphClient: g });
+    const result = await deletePlannerTaskTool.execute({ taskId: T1 }, { graphClient: g });
     expect(result.isError).toBeUndefined();
     expect(g.calls.some((c) => c.options.method === 'DELETE')).toBe(true);
   });
@@ -65,10 +88,10 @@ describe('delete-planner-task confirm gate', () => {
   it('gate on: refuses without confirm: true and never touches Graph', async () => {
     process.env.MS365_MCP_REQUIRE_CONFIRM = 'true';
     const g = fakeGraph({
-      'GET /planner/tasks/T1': { id: 'T1', '@odata.etag': 'W/"1"' },
-      'DELETE /planner/tasks/T1': {},
+      [`GET /planner/tasks/${T1}`]: { id: T1, '@odata.etag': 'W/"1"' },
+      [`DELETE /planner/tasks/${T1}`]: {},
     });
-    const result = await deletePlannerTaskTool.execute({ taskId: 'T1' }, { graphClient: g });
+    const result = await deletePlannerTaskTool.execute({ taskId: T1 }, { graphClient: g });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/confirmation_required/);
     expect(g.calls).toHaveLength(0);
@@ -77,11 +100,11 @@ describe('delete-planner-task confirm gate', () => {
   it('gate on: proceeds with confirm: true', async () => {
     process.env.MS365_MCP_REQUIRE_CONFIRM = 'true';
     const g = fakeGraph({
-      'GET /planner/tasks/T1': { id: 'T1', '@odata.etag': 'W/"1"' },
-      'DELETE /planner/tasks/T1': {},
+      [`GET /planner/tasks/${T1}`]: { id: T1, '@odata.etag': 'W/"1"' },
+      [`DELETE /planner/tasks/${T1}`]: {},
     });
     const result = await deletePlannerTaskTool.execute(
-      { taskId: 'T1', confirm: true },
+      { taskId: T1, confirm: true },
       { graphClient: g }
     );
     expect(result.isError).toBeUndefined();
@@ -93,7 +116,7 @@ describe('delete-planner-task schema', () => {
   const schema = z.object(deletePlannerTaskTool.buildSchema());
 
   it('accepts a well-formed 28-character Planner task id', () => {
-    expect(schema.safeParse({ taskId: 'A'.repeat(28) }).success).toBe(true);
+    expect(schema.safeParse({ taskId: T1 }).success).toBe(true);
   });
 
   it('rejects a path-traversal-style id', () => {

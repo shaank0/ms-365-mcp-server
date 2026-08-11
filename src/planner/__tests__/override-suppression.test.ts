@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { registerGraphTools } from '../../graph-tools.js';
+import { registerGraphTools, buildToolsRegistry } from '../../graph-tools.js';
 import type GraphClient from '../../graph-client.js';
 
 /**
@@ -87,5 +87,15 @@ describe('overlay suppression of a colliding declarative endpoint', () => {
 
     // An unrelated declarative endpoint is unaffected by the override.
     expect(declarativeNames).toContain('list-mail-messages');
+  });
+
+  // buildToolsRegistry backs discovery mode's search-tools/get-tool-schema/execute-tool
+  // triad and reads the SAME allEndpoints array as registerGraphTools above, but is a
+  // separate function - pin it directly so a future refactor that splits the two
+  // registration paths can't silently regress discovery mode's suppression.
+  it('excludes the overridden name from buildToolsRegistry (discovery mode) too', () => {
+    const registry = buildToolsRegistry(false, false);
+    expect(registry.has('update-planner-task')).toBe(false);
+    expect(registry.has('list-mail-messages')).toBe(true);
   });
 });
