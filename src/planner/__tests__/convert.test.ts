@@ -17,13 +17,28 @@ describe('toPriority', () => {
     expect(toPriority(10)).toBe(10);
   });
 
+  it('explicitly pins priority 0', () => {
+    expect(toPriority(0)).toBe(0);
+  });
+
   it('rejects out-of-range integers', () => {
     expect(() => toPriority(11)).toThrow(/0-10/);
+  });
+
+  it.each([[-1], [3.5], [NaN], [Infinity]])('rejects numeric edge case %s', (value) => {
+    expect(() => toPriority(value)).toThrow(/0-10/);
   });
 
   it('rejects unknown words', () => {
     expect(() => toPriority('spicy')).toThrow(/urgent/);
   });
+
+  it.each([['constructor'], ['toString'], ['hasOwnProperty']])(
+    'rejects prototype property %s',
+    (prop) => {
+      expect(() => toPriority(prop)).toThrow(/urgent/);
+    }
+  );
 });
 
 describe('statusToPercent', () => {
@@ -35,8 +50,16 @@ describe('statusToPercent', () => {
     expect(statusToPercent(status as string)).toBe(expected);
   });
 
+  it('trims and lowercases status strings', () => {
+    expect(statusToPercent('  Complete  ')).toBe(100);
+  });
+
   it('rejects an unknown status', () => {
     expect(() => statusToPercent('done-ish')).toThrow(/complete/);
+  });
+
+  it.each([['constructor'], ['valueOf']])('rejects prototype property %s', (prop) => {
+    expect(() => statusToPercent(prop)).toThrow(/complete/);
   });
 });
 
@@ -65,5 +88,9 @@ describe('toChecklist', () => {
 
   it('generates distinct keys by default', () => {
     expect(Object.keys(toChecklist(['a', 'b', 'c'])).length).toBe(3);
+  });
+
+  it('returns empty dict for empty list', () => {
+    expect(toChecklist([])).toEqual({});
   });
 });

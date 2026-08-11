@@ -1,17 +1,15 @@
 import { randomUUID } from 'node:crypto';
 
-const PRIORITY_WORDS: Record<string, number> = {
-  urgent: 1,
-  important: 3,
-  medium: 5,
-  low: 9,
-};
+const PRIORITY_WORDS: Record<string, number> = Object.create(null);
+PRIORITY_WORDS.urgent = 1;
+PRIORITY_WORDS.important = 3;
+PRIORITY_WORDS.medium = 5;
+PRIORITY_WORDS.low = 9;
 
-const STATUS_PERCENT: Record<string, number> = {
-  complete: 100,
-  'in-progress': 50,
-  'not-started': 0,
-};
+const STATUS_PERCENT: Record<string, number> = Object.create(null);
+STATUS_PERCENT.complete = 100;
+STATUS_PERCENT['in-progress'] = 50;
+STATUS_PERCENT['not-started'] = 0;
 
 export function toPriority(value: string | number): number {
   if (typeof value === 'number') {
