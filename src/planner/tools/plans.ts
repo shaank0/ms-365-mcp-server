@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { postJson, paginate, type GraphLike } from '../graph.js';
+import { postJson, paginate } from '../graph.js';
 import { resolveGroup } from '../resolve.js';
 import { ok, toolError } from '../result.js';
 import { checkConfirmGate } from '../confirm-gate.js';
@@ -74,19 +74,21 @@ export const createPlannerPlanTool: PlannerTool = {
         }
       }
 
-      return ok({
-        id: plan.id,
-        title: plan.title,
-        groupId,
-        buckets: created,
-        ...(failed.length
-          ? {
-              warning: `The plan was created, but these buckets were NOT created: ${failed.join(', ')}. Add them with create-planner-bucket using planId ${plan.id}.`,
-            }
-          : {}),
-      });
+      return {
+        ...ok({
+          id: plan.id,
+          title: plan.title,
+          groupId,
+          buckets: created,
+          ...(failed.length
+            ? {
+                warning: `The plan was created, but these buckets were NOT created: ${failed.join(', ')}. Add them with create-planner-bucket using planId ${plan.id}.`,
+              }
+            : {}),
+        }),
+      };
     } catch (err) {
-      return toolError(err);
+      return { ...toolError(err) };
     }
   },
 };
@@ -139,27 +141,29 @@ export const listPlannerPlansTool: PlannerTool = {
         }
       }
 
-      return ok({
-        plans,
-        ...(skippedGroups.length ? { skippedGroups } : {}),
-        ...(groupsWithMorePlans.length
-          ? {
-              truncatedGroupPlans: `These groups have more than ${PLANS_PER_GROUP_CAP} plans; only the first ${PLANS_PER_GROUP_CAP} are listed for each: ${groupsWithMorePlans.join(', ')}.`,
-            }
-          : {}),
-        ...(groupsTruncated
-          ? {
-              truncated: `Only the first ${GROUP_FANOUT_CAP} of your ${unifiedGroups.length} Microsoft 365 groups were scanned; plans in the remaining groups are not listed.`,
-            }
-          : {}),
-        ...(membershipTruncated
-          ? {
-              truncatedMemberships: `Only the first ${MEMBERSHIP_SCAN_CAP} directory memberships were checked; you may belong to Microsoft 365 groups beyond those, which were not considered.`,
-            }
-          : {}),
-      });
+      return {
+        ...ok({
+          plans,
+          ...(skippedGroups.length ? { skippedGroups } : {}),
+          ...(groupsWithMorePlans.length
+            ? {
+                truncatedGroupPlans: `These groups have more than ${PLANS_PER_GROUP_CAP} plans; only the first ${PLANS_PER_GROUP_CAP} are listed for each: ${groupsWithMorePlans.join(', ')}.`,
+              }
+            : {}),
+          ...(groupsTruncated
+            ? {
+                truncated: `Only the first ${GROUP_FANOUT_CAP} of your ${unifiedGroups.length} Microsoft 365 groups were scanned; plans in the remaining groups are not listed.`,
+              }
+            : {}),
+          ...(membershipTruncated
+            ? {
+                truncatedMemberships: `Only the first ${MEMBERSHIP_SCAN_CAP} directory memberships were checked; you may belong to Microsoft 365 groups beyond those, which were not considered.`,
+              }
+            : {}),
+        }),
+      };
     } catch (err) {
-      return toolError(err);
+      return { ...toolError(err) };
     }
   },
 };
