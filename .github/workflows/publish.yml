@@ -50,4 +50,4 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/shaank0/ms365-mcp:latest
+          tags: ghcr.io/shaank0/ms-365-mcp-server:latest
