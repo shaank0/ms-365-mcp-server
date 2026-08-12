@@ -1,0 +1,53 @@
+name: publish-ms365-mcp
+
+on:
+  push:
+    branches: [gateway]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The generated client is gitignored and rebuilt by `npm run generate`,
+      # which rewrites its `@zodios/core` import to the local ./hack.js shim.
+      # That package is deliberately NOT a dependency. The rewrite has been
+      # observed to silently no-op against a stale generated file, leaving the
+      # raw import behind — which makes 8 test files fail to collect with a
+      # confusing "cannot find module" rather than an obvious error. Force a
+      # clean generation, then assert the rewrite actually happened.
+      - name: Force a clean client generation
+        run: rm -f src/generated/client.ts src/generated/client-beta.ts
+
+      - run: npm run verify
+
+      - name: Assert the zodios rewrite applied
+        run: |
+          if grep -rn "from '@zodios/core'" src/generated/; then
+            echo "::error::generate left a raw @zodios/core import; the ./hack.js rewrite did not apply"
+            exit 1
+          fi
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/shaank0/ms365-mcp:latest
