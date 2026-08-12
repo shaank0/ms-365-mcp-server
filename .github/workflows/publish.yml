@@ -40,14 +40,67 @@ jobs:
             exit 1
           fi
 
+      - uses: docker/setup-buildx-action@v3
+
+      # Build once, locally only (no push), so it can be smoke-tested before
+      # anything reaches the registry. This is a completely independent
+      # execution path from `npm run verify` above: it also re-runs `npm run
+      # generate` and `npm run build` inside the Dockerfile's builder stage,
+      # catches the same @zodios/core rewrite hazard on its own (see the
+      # Dockerfile), and additionally proves the *published artifact* — the
+      # actual container, not just the source tree — starts and serves
+      # traffic. None of that is exercised by the steps above.
+      - name: Build image (local only, for the smoke test)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: ms365-mcp-server:smoke-test
+
+      - name: Smoke test — confirm the built image starts and demands a bearer token
+        run: |
+          docker run -d --name smoke -p 3000:3000 ms365-mcp-server:smoke-test
+          code=""
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+              -H 'Content-Type: application/json' \
+              -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+              http://localhost:3000/mcp || true)
+            if [ "$code" = "401" ] || [ "$code" = "400" ]; then
+              echo "Smoke test passed: HTTP $code — server is up and correctly refusing an unauthenticated call"
+              break
+            fi
+            sleep 1
+          done
+          if [ "$code" != "401" ] && [ "$code" != "400" ]; then
+            echo "::error::Smoke test failed — the built image never answered 401/400 on /mcp (last observed: '$code')"
+            docker logs smoke || true
+            docker stop smoke || true
+            exit 1
+          fi
+          docker stop smoke
+
+      - name: Compute a short SHA for the immutable tag
+        id: vars
+        run: echo "sha_short=$(echo ${{ github.sha }} | cut -c1-7)" >> "$GITHUB_OUTPUT"
+
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Rebuild and push. This reuses the buildx/Docker layer cache from the
+      # local-only build above (same context, same Dockerfile, nothing
+      # changed in between), so it doesn't redundantly re-run generate/build
+      # from scratch. Every publish gets an immutable `sha-<short>` tag
+      # alongside the mutable `latest` the gateway pulls, so a bad `latest`
+      # always has a prior known-good tag to roll back to.
       - uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          tags: ghcr.io/shaank0/ms-365-mcp-server:latest
+          tags: |
+            ghcr.io/shaank0/ms-365-mcp-server:latest
+            ghcr.io/shaank0/ms-365-mcp-server:sha-${{ steps.vars.outputs.sha_short }}

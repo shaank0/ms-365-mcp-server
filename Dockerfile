@@ -15,7 +15,21 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
-RUN npm run generate
+
+# `npm run generate` rewrites the generated client's `@zodios/core` import to
+# the local ./hack.js shim (that package is deliberately NOT a dependency).
+# That rewrite has been observed to silently no-op, leaving the raw import
+# behind — and because tsup.config.ts sets bundle:false, `npm run build`
+# transpiles per-file and never resolves it, so the build stays silently
+# green and the container only fails at runtime with ERR_MODULE_NOT_FOUND.
+# Assert here too (the CI workflow has the same check) so a plain
+# `docker build` from a fresh clone is protected on its own, independent of
+# the workflow.
+RUN npm run generate && \
+    if grep -rn "from '@zodios/core'" src/generated/; then \
+      echo "generate left a raw @zodios/core import; the ./hack.js rewrite did not apply" >&2; \
+      exit 1; \
+    fi
 RUN npm run build
 
 FROM node:24-alpine AS release

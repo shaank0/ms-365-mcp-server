@@ -14,8 +14,14 @@ export function generateMcpTools(openapiTrimmedFile, clientFilePath) {
       console.log(`Created directory: ${outputDir}`);
     }
 
+    // Pinned: unpinned `npx -y openapi-zod-client` resolves "latest" independently
+    // on every host/CI runner/Docker build, so the tool's output shape (and thus
+    // whether the @zodios/core rewrite below still matches) can drift between two
+    // otherwise-identical `npm run generate` invocations. 1.18.3 is the version
+    // that was actually resolved (and verified working end-to-end: npm run verify
+    // green, image smoke-tested) as of this pin — bump deliberately, not by drift.
     execSync(
-      `npx -y openapi-zod-client "${openapiTrimmedFile}" -o "${clientFilePath}" --with-description --strict-objects --additional-props-default-value=false`,
+      `npx -y openapi-zod-client@1.18.3 "${openapiTrimmedFile}" -o "${clientFilePath}" --with-description --strict-objects --additional-props-default-value=false`,
       {
         stdio: 'inherit',
       }

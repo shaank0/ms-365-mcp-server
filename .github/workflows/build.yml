@@ -8,6 +8,15 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Explicit least-privilege token: this job only reads the repo, installs,
+    # lints, builds, and tests — it never needs to write anything. Without
+    # this, it would inherit the repo-wide default_workflow_permissions
+    # (write, required for publish.yml's packages:write), which is broader
+    # than a same-repo pull_request run needs. GitHub still forces a
+    # read-only token for external-fork PRs regardless, but same-repo branch
+    # PRs would otherwise run with a write-capable token for no reason.
+    permissions:
+      contents: read
 
     strategy:
       matrix:
