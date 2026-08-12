@@ -550,6 +550,76 @@ describe('update-planner-task', () => {
     expect(patch!.options.headers['If-Match']).toBe('W/"t1"');
   });
 
+  // The ETag-hint reuse (Minor #4 in fix round 1) must never survive a 412:
+  // the hint closures null themselves on first use so withEtagRetry's second
+  // read() falls through to a REAL getEtag call, sending back a DIFFERENT,
+  // freshly-fetched ETag on retry. Deleting either `etagHint = undefined` /
+  // `taskEtagHint = undefined` line would memoize the stale ETag instead,
+  // guaranteeing a second 412 - silently dead concurrency handling that the
+  // rest of the suite does not otherwise catch (every other test only 412s
+  // zero or one time, never observing what the retry actually sends).
+  describe('412 retry refetches a fresh ETag, not the one that just failed', () => {
+    it('task PATCH: retries with a freshly-fetched ETag, never resending the stale hint', async () => {
+      let taskGetCount = 0;
+      const bucketId = 'B'.repeat(28);
+      const g = fakeGraph({
+        [`GET /planner/tasks/${T1}`]: () => {
+          taskGetCount += 1;
+          return { id: T1, planId: PLAN, '@odata.etag': taskGetCount === 1 ? 'W/"t1"' : 'W/"t2"' };
+        },
+        [`PATCH /planner/tasks/${T1}`]: (options: Record<string, any>) => {
+          if (options.headers['If-Match'] === 'W/"t1"') throw preconditionFailed();
+          return {};
+        },
+      });
+
+      // bucketId is already a 28-character id, so resolveBucket returns it
+      // directly with no further Graph call - isolating the ETag-hint retry
+      // behavior from bucket-name resolution.
+      const result = await updatePlannerTaskTool.execute(
+        { taskId: T1, title: 'Renamed', bucket: bucketId },
+        { graphClient: g }
+      );
+      expect(result.isError).toBeUndefined();
+
+      const taskPatches = g.calls.filter(
+        (c) => c.options.method === 'PATCH' && !c.endpoint.endsWith('/details')
+      );
+      expect(taskPatches).toHaveLength(2);
+      expect(taskPatches[0].options.headers['If-Match']).toBe('W/"t1"');
+      expect(taskPatches[1].options.headers['If-Match']).toBe('W/"t2"');
+      expect(taskGetCount).toBe(2);
+    });
+
+    it('details PATCH: retries with a freshly-fetched ETag, never resending the stale hint', async () => {
+      let detailsGetCount = 0;
+      const g = fakeGraph({
+        [`GET /planner/tasks/${T1}/details`]: () => {
+          detailsGetCount += 1;
+          return { '@odata.etag': detailsGetCount === 1 ? 'W/"d1"' : 'W/"d2"' };
+        },
+        [`PATCH /planner/tasks/${T1}/details`]: (options: Record<string, any>) => {
+          if (options.headers['If-Match'] === 'W/"d1"') throw preconditionFailed();
+          return {};
+        },
+      });
+
+      const result = await updatePlannerTaskTool.execute(
+        { taskId: T1, checklist: ['a'] },
+        { graphClient: g }
+      );
+      expect(result.isError).toBeUndefined();
+
+      const detailPatches = g.calls.filter(
+        (c) => c.options.method === 'PATCH' && c.endpoint.endsWith('/details')
+      );
+      expect(detailPatches).toHaveLength(2);
+      expect(detailPatches[0].options.headers['If-Match']).toBe('W/"d1"');
+      expect(detailPatches[1].options.headers['If-Match']).toBe('W/"d2"');
+      expect(detailsGetCount).toBe(2);
+    });
+  });
+
   describe('assignments and checklist are replaced, not merged', () => {
     const groupId = '22222222-2222-2222-2222-222222222222';
     const oldMemberId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
