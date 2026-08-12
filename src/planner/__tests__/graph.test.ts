@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   getJson,
   getEtag,
+  getEntity,
   patchWithEtag,
   deleteWithEtag,
   paginate,
@@ -39,6 +40,23 @@ describe('getEtag', () => {
   it('throws when neither is present', async () => {
     const g = fakeGraph({ 'GET /planner/tasks/T': { id: 'T' } });
     await expect(getEtag(g, '/planner/tasks/T')).rejects.toThrow(/no ETag/i);
+  });
+});
+
+describe('getEntity', () => {
+  it('returns both the full body and the ETag from a single request', async () => {
+    const g = fakeGraph({
+      'GET /planner/tasks/T': { id: 'T', title: 'x', '@odata.etag': 'W/"abc"' },
+    });
+    const { body, etag } = await getEntity<{ id: string; title: string }>(g, '/planner/tasks/T');
+    expect(body).toEqual({ id: 'T', title: 'x', '@odata.etag': 'W/"abc"' });
+    expect(etag).toBe('W/"abc"');
+    expect(g.calls).toHaveLength(1);
+  });
+
+  it('throws when neither ETag field is present', async () => {
+    const g = fakeGraph({ 'GET /planner/tasks/T': { id: 'T' } });
+    await expect(getEntity(g, '/planner/tasks/T')).rejects.toThrow(/no ETag/i);
   });
 });
 

@@ -20,14 +20,27 @@ export async function postJson<T>(g: GraphLike, endpoint: string, body: unknown)
   })) as T;
 }
 
-/** Read an entity's ETag. Planner returns it in the body as @odata.etag. */
-export async function getEtag(g: GraphLike, endpoint: string): Promise<string> {
+/**
+ * Fetch an entity's full body together with its ETag, in a single request.
+ * Callers that also need the body (e.g. to read existing open-type map keys
+ * before a replacement PATCH) can use this instead of a separate getJson +
+ * getEtag pair, which would otherwise fetch the identical endpoint twice.
+ */
+export async function getEntity<T = Record<string, unknown>>(
+  g: GraphLike,
+  endpoint: string
+): Promise<{ body: T; etag: string }> {
   const entity = await g.makeRequest(endpoint, { includeHeaders: true });
   const etag = entity?.['@odata.etag'] ?? entity?._etag;
   if (!etag || etag === 'no-etag-found') {
     throw new Error(`Graph returned no ETag for ${endpoint}; cannot safely write to it.`);
   }
-  return etag as string;
+  return { body: entity as T, etag: etag as string };
+}
+
+/** Read an entity's ETag. Planner returns it in the body as @odata.etag. */
+export async function getEtag(g: GraphLike, endpoint: string): Promise<string> {
+  return (await getEntity(g, endpoint)).etag;
 }
 
 export async function patchWithEtag(

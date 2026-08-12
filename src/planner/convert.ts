@@ -35,6 +35,24 @@ export function statusToPercent(status: string): number {
   return mapped;
 }
 
+/**
+ * Build a full-replacement PATCH body for a Graph open-type map field
+ * (plannerTask.assignments, plannerTaskDetails.checklist). PATCH on these
+ * fields MERGES: a key absent from the body is left untouched, and removing
+ * one requires sending that key explicitly with a null value. A body built
+ * from `entries` alone would therefore only ever ADD or overwrite keys, never
+ * remove one that is no longer wanted - so an "update" tool that means
+ * "replace" has to explicitly null every existing key not present in the new
+ * set. Passing entries={} genuinely clears every existing key; passing
+ * existingKeys=[] is just entries with nothing to clear.
+ */
+export function toReplacement(
+  existingKeys: string[],
+  entries: Record<string, unknown>
+): Record<string, unknown> {
+  return { ...Object.fromEntries(existingKeys.map((key) => [key, null])), ...entries };
+}
+
 export function toChecklist(
   items: Array<string | { title: string; checked?: boolean }>,
   makeId: () => string = randomUUID

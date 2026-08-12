@@ -178,6 +178,22 @@ describe('create-planner-task', () => {
     expect(Object.values(checklist)[0]).toMatchObject({ title: 'a', isChecked: false });
   });
 
+  // Unlike update-planner-task's replacement semantics, create-planner-task targets
+  // a brand-new task with nothing to merge against - its checklist body must contain
+  // ONLY the new items, never a null entry (toReplacement is update-only; this pins
+  // that createPlannerTaskTool never starts calling it).
+  it('sends no null entries in the checklist body (nothing to clear on a new task)', async () => {
+    const g = fakeGraph(CREATE_TASK_ROUTES);
+    await createPlannerTaskTool.execute(
+      { planId: PLAN, title: 'Ship it', checklist: ['a', 'b'] },
+      { graphClient: g }
+    );
+    const patch = g.calls.find((c) => c.options.method === 'PATCH');
+    const checklist = JSON.parse(patch!.options.body).checklist as Record<string, unknown>;
+    expect(Object.keys(checklist)).toHaveLength(2);
+    expect(Object.values(checklist).every((v) => v !== null)).toBe(true);
+  });
+
   it('returns success WITH a warning when the details write fails', async () => {
     const g = fakeGraph({
       ...CREATE_TASK_ROUTES,
@@ -420,6 +436,10 @@ describe('update-planner-task', () => {
       (c) => c.options.method === 'PATCH' && c.endpoint.endsWith('/details')
     );
     expect(JSON.parse(detailPatch!.options.body).description).toBe('new text');
+    // Distinguish the details ETag (W/"d1") from the task ETag (W/"t1") - if
+    // applyDetails were ever handed the TASK's ETag instead of the details
+    // entity's own, this would still pass without this explicit check.
+    expect(detailPatch!.options.headers['If-Match']).toBe('W/"d1"');
   });
 
   it('errors when no updatable field is supplied', async () => {
@@ -460,6 +480,183 @@ describe('update-planner-task', () => {
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/taskId/);
     expect(g.calls).toHaveLength(0);
+  });
+
+  // Mirror of create-planner-task's "wires bucket, assignees, dates and priority
+  // into the correct POST body fields" test above: each field-in-isolation test
+  // proves resolveBucket/resolveAssignees/toPriority are correct in isolation, but
+  // not that the result landed under the RIGHT body key - a bucketId/assignments
+  // typo in the wiring would pass every test above. The task here starts with no
+  // existing assignees, so the resolved assignment is a pure addition (no nulled
+  // keys), isolating the "does it land in the right field" question from the
+  // merge/replacement behavior covered separately below.
+  it('wires bucket, assignees, dates, priority, status and percentComplete into the correct PATCH body fields', async () => {
+    const groupId = '11111111-1111-1111-1111-111111111111';
+    const memberId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+    const bucketId = 'B'.repeat(28);
+
+    const g = fakeGraph({
+      [`GET /planner/tasks/${T1}`]: { id: T1, planId: PLAN, '@odata.etag': 'W/"t1"' },
+      // Longer/more specific paths must be listed before shorter prefixes of
+      // themselves - fakeGraph matches by endpoint.startsWith(routePath), so
+      // `/planner/plans/${PLAN}` would otherwise swallow the `/buckets` call.
+      [`GET /planner/plans/${PLAN}/buckets`]: { value: [{ id: bucketId, name: 'To Do' }] },
+      [`GET /planner/plans/${PLAN}`]: {
+        id: PLAN,
+        container: { containerId: groupId, type: 'group' },
+      },
+      [`GET /groups/${groupId}/members`]: {
+        value: [{ id: memberId, mail: 'will@kw-corp.com', userPrincipalName: 'will@kw-corp.com' }],
+      },
+      [`PATCH /planner/tasks/${T1}`]: {},
+    });
+
+    const result = await updatePlannerTaskTool.execute(
+      {
+        taskId: T1,
+        bucket: 'To Do',
+        assignees: ['will@kw-corp.com'],
+        dueDateTime: '2026-09-01T00:00:00Z',
+        startDateTime: '2026-08-01T00:00:00Z',
+        priority: 'urgent',
+        percentComplete: 77,
+      },
+      { graphClient: g }
+    );
+    expect(result.isError).toBeUndefined();
+
+    const patch = g.calls.find(
+      (c) => c.options.method === 'PATCH' && !c.endpoint.endsWith('/details')
+    );
+    const body = JSON.parse(patch!.options.body);
+    expect(body.bucketId).toBe(bucketId);
+    expect(body.assignments).toEqual({
+      [memberId]: { '@odata.type': '#microsoft.graph.plannerAssignment', orderHint: ' !' },
+    });
+    expect(body.dueDateTime).toBe('2026-09-01T00:00:00Z');
+    expect(body.startDateTime).toBe('2026-08-01T00:00:00Z');
+    expect(body.priority).toBe(1);
+    expect(body.percentComplete).toBe(77);
+
+    // Reuses the task GET's own ETag for the PATCH instead of fetching the
+    // identical endpoint a second time. A plain GET call carries no explicit
+    // "method" in options (fakeGraph/GraphClient default it), so it must be
+    // matched as (options.method ?? 'GET') === 'GET', not a literal 'GET'.
+    expect(
+      g.calls.filter(
+        (c) => (c.options.method ?? 'GET') === 'GET' && c.endpoint === `/planner/tasks/${T1}`
+      )
+    ).toHaveLength(1);
+    expect(patch!.options.headers['If-Match']).toBe('W/"t1"');
+  });
+
+  describe('assignments and checklist are replaced, not merged', () => {
+    const groupId = '22222222-2222-2222-2222-222222222222';
+    const oldMemberId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+    const newMemberId = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+
+    // plannerTask.assignments and plannerTaskDetails.checklist are Graph OPEN
+    // TYPES: PATCH merges keys already in the body, leaving anything absent
+    // untouched. A body containing only the resolved/new entries would silently
+    // fail to remove stale ones - these routes give the task existing assignees
+    // and the details existing checklist items to prove they get explicitly
+    // nulled, not left dangling.
+    const routesWithExisting = {
+      [`GET /planner/tasks/${T1}/details`]: {
+        '@odata.etag': 'W/"d1"',
+        checklist: {
+          'existing-1': { title: 'old item 1', isChecked: false },
+          'existing-2': { title: 'old item 2', isChecked: true },
+        },
+      },
+      [`GET /planner/tasks/${T1}`]: {
+        id: T1,
+        planId: PLAN,
+        '@odata.etag': 'W/"t1"',
+        assignments: {
+          [oldMemberId]: { '@odata.type': '#microsoft.graph.plannerAssignment', orderHint: ' !' },
+        },
+      },
+      [`GET /planner/plans/${PLAN}`]: {
+        id: PLAN,
+        container: { containerId: groupId, type: 'group' },
+      },
+      [`GET /groups/${groupId}/members`]: {
+        value: [{ id: newMemberId, mail: 'new@kw-corp.com', userPrincipalName: 'new@kw-corp.com' }],
+      },
+      [`PATCH /planner/tasks/${T1}/details`]: {},
+      [`PATCH /planner/tasks/${T1}`]: {},
+    };
+
+    it('clearing assignees (empty array) nulls every existing key, unassigning everyone', async () => {
+      const g = fakeGraph(routesWithExisting);
+      await updatePlannerTaskTool.execute({ taskId: T1, assignees: [] }, { graphClient: g });
+      const patch = g.calls.find(
+        (c) => c.options.method === 'PATCH' && !c.endpoint.endsWith('/details')
+      );
+      expect(JSON.parse(patch!.options.body).assignments).toEqual({ [oldMemberId]: null });
+    });
+
+    it('replacing assignees nulls the stale assignee AND adds the new one', async () => {
+      const g = fakeGraph(routesWithExisting);
+      await updatePlannerTaskTool.execute(
+        { taskId: T1, assignees: ['new@kw-corp.com'] },
+        { graphClient: g }
+      );
+      const patch = g.calls.find(
+        (c) => c.options.method === 'PATCH' && !c.endpoint.endsWith('/details')
+      );
+      expect(JSON.parse(patch!.options.body).assignments).toEqual({
+        [oldMemberId]: null,
+        [newMemberId]: { '@odata.type': '#microsoft.graph.plannerAssignment', orderHint: ' !' },
+      });
+    });
+
+    it('clearing the checklist (empty array) nulls every existing item', async () => {
+      const g = fakeGraph(routesWithExisting);
+      await updatePlannerTaskTool.execute({ taskId: T1, checklist: [] }, { graphClient: g });
+      const detailPatch = g.calls.find(
+        (c) => c.options.method === 'PATCH' && c.endpoint.endsWith('/details')
+      );
+      expect(JSON.parse(detailPatch!.options.body).checklist).toEqual({
+        'existing-1': null,
+        'existing-2': null,
+      });
+    });
+
+    it('replacing the checklist nulls the stale items AND adds the new one', async () => {
+      const g = fakeGraph(routesWithExisting);
+      await updatePlannerTaskTool.execute(
+        { taskId: T1, checklist: ['new item'] },
+        { graphClient: g }
+      );
+      const detailPatch = g.calls.find(
+        (c) => c.options.method === 'PATCH' && c.endpoint.endsWith('/details')
+      );
+      const checklist = JSON.parse(detailPatch!.options.body).checklist as Record<string, unknown>;
+      expect(checklist['existing-1']).toBeNull();
+      expect(checklist['existing-2']).toBeNull();
+      const newEntries = Object.entries(checklist).filter(([key]) => !key.startsWith('existing-'));
+      expect(newEntries).toHaveLength(1);
+      expect(newEntries[0][1]).toMatchObject({ title: 'new item', isChecked: false });
+    });
+
+    // Reuses the GET already performed to read the existing checklist keys
+    // for the details PATCH's ETag, instead of fetching /details a second time.
+    it('fetches the details entity exactly once when clearing the checklist', async () => {
+      const g = fakeGraph(routesWithExisting);
+      await updatePlannerTaskTool.execute({ taskId: T1, checklist: [] }, { graphClient: g });
+      // A plain GET carries no explicit "method" in options (fakeGraph/GraphClient
+      // default it), so it must be matched as (options.method ?? 'GET') === 'GET'.
+      const detailsGets = g.calls.filter(
+        (c) => (c.options.method ?? 'GET') === 'GET' && c.endpoint.endsWith('/details')
+      );
+      expect(detailsGets).toHaveLength(1);
+      const detailPatch = g.calls.find(
+        (c) => c.options.method === 'PATCH' && c.endpoint.endsWith('/details')
+      );
+      expect(detailPatch!.options.headers['If-Match']).toBe('W/"d1"');
+    });
   });
 });
 
@@ -525,5 +722,17 @@ describe('update-planner-task schema', () => {
   it('rejects a taskId containing a slash', () => {
     const result = schema.safeParse({ taskId: 'abc/def', title: 'Renamed' });
     expect(result.success).toBe(false);
+  });
+
+  it('rejects a percentComplete above 100', () => {
+    expect(schema.safeParse({ taskId: T1, percentComplete: 101 }).success).toBe(false);
+  });
+
+  it('rejects a percentComplete below 0', () => {
+    expect(schema.safeParse({ taskId: T1, percentComplete: -1 }).success).toBe(false);
+  });
+
+  it('rejects a non-integer percentComplete', () => {
+    expect(schema.safeParse({ taskId: T1, percentComplete: 3.7 }).success).toBe(false);
   });
 });

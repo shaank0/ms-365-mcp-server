@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { toPriority, statusToPercent, toChecklist } from '../convert.js';
+import { toPriority, statusToPercent, toChecklist, toReplacement } from '../convert.js';
 
 describe('toPriority', () => {
   it.each([
@@ -92,5 +92,27 @@ describe('toChecklist', () => {
 
   it('returns empty dict for empty list', () => {
     expect(toChecklist([])).toEqual({});
+  });
+});
+
+describe('toReplacement', () => {
+  it('nulls every existing key when entries is empty (genuine clear)', () => {
+    expect(toReplacement(['a', 'b'], {})).toEqual({ a: null, b: null });
+  });
+
+  it('nulls stale keys AND keeps/adds entries keys', () => {
+    expect(toReplacement(['a', 'b'], { b: { v: 2 }, c: { v: 3 } })).toEqual({
+      a: null,
+      b: { v: 2 },
+      c: { v: 3 },
+    });
+  });
+
+  it('passes entries through unchanged when there is nothing existing to clear', () => {
+    expect(toReplacement([], { c: { v: 3 } })).toEqual({ c: { v: 3 } });
+  });
+
+  it('returns an empty object when both existingKeys and entries are empty', () => {
+    expect(toReplacement([], {})).toEqual({});
   });
 });

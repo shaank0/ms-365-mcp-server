@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import {
   getEtag,
-  getJson,
+  getEntity,
   deleteWithEtag,
   patchWithEtag,
   postJson,
@@ -10,7 +10,7 @@ import {
   type GraphLike,
 } from '../graph.js';
 import { resolveBucket, resolveAssignees } from '../resolve.js';
-import { toPriority, toChecklist, statusToPercent } from '../convert.js';
+import { toPriority, toChecklist, toReplacement, statusToPercent } from '../convert.js';
 import { ok, toolError, type McpResult } from '../result.js';
 import { checkConfirmGate } from '../confirm-gate.js';
 import { requirePlannerId } from '../validate.js';
@@ -78,16 +78,32 @@ export const deletePlannerTaskTool: PlannerTool = {
  * message instead of throwing, because a details failure must not lose an
  * already-created task — the caller reports it as a warning alongside the
  * task id rather than losing the write silently.
+ *
+ * `knownEtag`, when given, is used for the FIRST write attempt instead of an
+ * extra GET — the caller already fetched this entity (e.g. to read its
+ * existing checklist keys before building a replacement body) and its
+ * response already carried the ETag, so re-fetching it here would be a
+ * redundant second request for the identical endpoint. A genuine 412 still
+ * triggers a fresh GET on retry, same as when no hint is given.
  */
 async function applyDetails(
   graphClient: GraphLike,
   taskId: string,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
+  knownEtag?: string
 ): Promise<string | null> {
   const endpoint = `/planner/tasks/${taskId}/details`;
+  let etagHint = knownEtag;
   try {
     await withEtagRetry(
-      () => getEtag(graphClient, endpoint),
+      () => {
+        if (etagHint !== undefined) {
+          const etag = etagHint;
+          etagHint = undefined;
+          return Promise.resolve(etag);
+        }
+        return getEtag(graphClient, endpoint);
+      },
       (etag) => patchWithEtag(graphClient, endpoint, body, etag)
     );
     return null;
@@ -244,8 +260,13 @@ export const updatePlannerTaskTool: PlannerTool = {
       .describe('complete, in-progress or not-started. Sets percentComplete to 100, 50 or 0.'),
     percentComplete: z
       .number()
+      .int()
+      .min(0)
+      .max(100)
       .optional()
-      .describe('Explicit completion percentage, 0-100. Overrides status if both are given.'),
+      .describe(
+        'Explicit completion percentage, an integer 0-100. Overrides status if both are given.'
+      ),
     checklist: z
       .array(
         z.union([z.string(), z.object({ title: z.string(), checked: z.boolean().optional() })])
@@ -279,20 +300,53 @@ export const updatePlannerTaskTool: PlannerTool = {
       // percentComplete is checked after status so an explicit value always wins.
       if (params.percentComplete !== undefined) taskBody.percentComplete = params.percentComplete;
 
-      // Bucket and assignee resolution both need the plan, which lives on the task.
+      // Bucket and assignee resolution both need the plan, which lives on the
+      // task; fetch the task's body AND ETag in one request when either is
+      // needed, so the PATCH below can reuse this same ETag instead of
+      // fetching the identical endpoint again.
+      let taskEtagHint: string | undefined;
       if (params.bucket !== undefined || params.assignees !== undefined) {
-        const task = await getJson<{ planId: string }>(graphClient, taskEndpoint);
+        const { body: task, etag } = await getEntity<{
+          planId: string;
+          assignments?: Record<string, unknown>;
+        }>(graphClient, taskEndpoint);
+        taskEtagHint = etag;
         if (params.bucket !== undefined) {
           taskBody.bucketId = await resolveBucket(graphClient, task.planId, params.bucket);
         }
         if (params.assignees !== undefined) {
-          taskBody.assignments = await resolveAssignees(graphClient, task.planId, params.assignees);
+          // plannerTask.assignments is a Graph open-type map: PATCH merges it,
+          // so a body built from the newly-resolved assignees alone would only
+          // ever ADD people, never remove someone no longer in the list (and
+          // an empty array would be a silent no-op instead of "unassign
+          // everyone"). Null every existing key not in the new set so this is
+          // a genuine replacement, matching what the schema promises.
+          const resolved = await resolveAssignees(graphClient, task.planId, params.assignees);
+          taskBody.assignments = toReplacement(Object.keys(task.assignments ?? {}), resolved);
         }
       }
 
       const detailsBody: Record<string, unknown> = {};
       if (params.description !== undefined) detailsBody.description = params.description;
-      if (params.checklist !== undefined) detailsBody.checklist = toChecklist(params.checklist);
+
+      // Same open-type-map merge problem as assignments above, for
+      // plannerTaskDetails.checklist: read the existing keys (and this
+      // entity's ETag, in the same request) before building the replacement
+      // body, so a checklist item removed from the new list is actually
+      // nulled out rather than left dangling, and toChecklist's fresh
+      // randomUUID() keys never merely append to what's already there.
+      let detailsEtagHint: string | undefined;
+      if (params.checklist !== undefined) {
+        const { body: details, etag } = await getEntity<{ checklist?: Record<string, unknown> }>(
+          graphClient,
+          `/planner/tasks/${taskId}/details`
+        );
+        detailsEtagHint = etag;
+        detailsBody.checklist = toReplacement(
+          Object.keys(details.checklist ?? {}),
+          toChecklist(params.checklist)
+        );
+      }
 
       if (Object.keys(taskBody).length === 0 && Object.keys(detailsBody).length === 0) {
         throw new Error(
@@ -302,13 +356,20 @@ export const updatePlannerTaskTool: PlannerTool = {
 
       if (Object.keys(taskBody).length > 0) {
         await withEtagRetry(
-          () => getEtag(graphClient, taskEndpoint),
+          () => {
+            if (taskEtagHint !== undefined) {
+              const etag = taskEtagHint;
+              taskEtagHint = undefined;
+              return Promise.resolve(etag);
+            }
+            return getEtag(graphClient, taskEndpoint);
+          },
           (etag) => patchWithEtag(graphClient, taskEndpoint, taskBody, etag)
         );
       }
 
       if (Object.keys(detailsBody).length > 0) {
-        const failure = await applyDetails(graphClient, taskId, detailsBody);
+        const failure = await applyDetails(graphClient, taskId, detailsBody, detailsEtagHint);
         if (failure) {
           // The task fields (if any) were already saved successfully - report
           // that as success, but never silently drop the description/checklist.
