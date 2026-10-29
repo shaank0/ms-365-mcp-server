@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { registerGraphTools } from '../src/graph-tools.js';
 import type { GraphClient } from '../src/graph-client.js';
+import { registerGraphTools } from '../src/graph-tools.js';
 
 vi.mock('../src/logger.js', () => ({
   default: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
@@ -15,6 +15,10 @@ describe('Misplaced request body wrapping (issue #620)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // This suite asserts exact sent bodies; keep the Teams message signoff
+    // (message-signoff.test.ts) out of the picture.
+    vi.stubEnv('MS365_MCP_MESSAGE_SIGNOFF_PREFIX', '');
+    vi.stubEnv('MS365_MCP_MESSAGE_SIGNOFF_SUFFIX', '');
     mockServer = { tool: vi.fn(), registerTool: vi.fn() };
     mockGraphClient = {
       graphRequest: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: '{}' }] }),
@@ -22,7 +26,7 @@ describe('Misplaced request body wrapping (issue #620)', () => {
   });
 
   function getToolHandler(toolName: string) {
-    registerGraphTools(mockServer, mockGraphClient, false, undefined, true);
+    registerGraphTools(mockServer, mockGraphClient, { orgMode: true });
     const call = mockServer.registerTool.mock.calls.find((c: unknown[]) => c[0] === toolName);
     expect(call).toBeDefined();
     return call![call!.length - 1] as (params: Record<string, unknown>) => Promise<unknown>;

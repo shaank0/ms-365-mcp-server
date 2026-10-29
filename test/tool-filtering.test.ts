@@ -1,11 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { registerGraphTools } from '../src/graph-tools.js';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import GraphClient from '../src/graph-client.js';
+import { registerGraphTools } from '../src/graph-tools.js';
 
 vi.mock('../src/logger.js', () => ({
   default: {
     info: vi.fn(),
+    warn: vi.fn(),
     error: vi.fn(),
   },
 }));
@@ -54,14 +55,14 @@ describe('Tool Filtering', () => {
   });
 
   it('should register all tools when no filter is provided', () => {
-    registerGraphTools(server, graphClient, false);
+    registerGraphTools(server, graphClient);
 
     // 5 mocked graph endpoints via registerTool; utilities via tool
     // (parse-teams-url, download-bytes, download-bytes-to-file, get-download-url,
-    // create-planner-plan, list-planner-plans, delete-planner-task,
-    // create-planner-task, update-planner-task)
+    // get-upload-url, read-mail-text, create-planner-plan, list-planner-plans,
+    // delete-planner-task, create-planner-task, update-planner-task)
     expect(registerToolSpy).toHaveBeenCalledTimes(5);
-    expect(toolSpy).toHaveBeenCalledTimes(9);
+    expect(toolSpy).toHaveBeenCalledTimes(11);
     expect(registerToolSpy).toHaveBeenCalledWith(
       'list-mail-messages',
       expect.any(Object),
@@ -90,7 +91,7 @@ describe('Tool Filtering', () => {
   });
 
   it('should filter tools by regex pattern - mail only', () => {
-    registerGraphTools(server, graphClient, false, 'mail');
+    registerGraphTools(server, graphClient, { enabledTools: 'mail' });
 
     expect(registerToolSpy).toHaveBeenCalledTimes(2);
     expect(registerToolSpy).toHaveBeenCalledWith(
@@ -106,7 +107,7 @@ describe('Tool Filtering', () => {
   });
 
   it('should filter tools by regex pattern - calendar or excel', () => {
-    registerGraphTools(server, graphClient, false, 'calendar|excel');
+    registerGraphTools(server, graphClient, { enabledTools: 'calendar|excel' });
 
     expect(registerToolSpy).toHaveBeenCalledTimes(2);
     expect(registerToolSpy).toHaveBeenCalledWith(
@@ -122,15 +123,15 @@ describe('Tool Filtering', () => {
   });
 
   it('should handle invalid regex patterns gracefully', () => {
-    registerGraphTools(server, graphClient, false, '[invalid regex');
+    registerGraphTools(server, graphClient, { enabledTools: '[invalid regex' });
 
     // 5 mocked endpoints + utilities (no filter applied on invalid regex)
     expect(registerToolSpy).toHaveBeenCalledTimes(5);
-    expect(toolSpy).toHaveBeenCalledTimes(9);
+    expect(toolSpy).toHaveBeenCalledTimes(11);
   });
 
   it('should combine read-only and filtering correctly', () => {
-    registerGraphTools(server, graphClient, true, 'mail');
+    registerGraphTools(server, graphClient, { readOnly: true, enabledTools: 'mail' });
 
     expect(registerToolSpy).toHaveBeenCalledTimes(1);
     expect(registerToolSpy).toHaveBeenCalledWith(
@@ -141,7 +142,7 @@ describe('Tool Filtering', () => {
   });
 
   it('should register no tools when pattern matches nothing', () => {
-    registerGraphTools(server, graphClient, false, 'nonexistent');
+    registerGraphTools(server, graphClient, { enabledTools: 'nonexistent' });
 
     expect(registerToolSpy).toHaveBeenCalledTimes(0);
     expect(toolSpy).toHaveBeenCalledTimes(0);

@@ -80,7 +80,7 @@ describe('overlay suppression of a colliding declarative endpoint', () => {
   it('registers ONLY the overlay for a name in OVERRIDDEN_TOOL_NAMES, not the declarative endpoint', () => {
     const mockServer = { tool: vi.fn(), registerTool: vi.fn() };
 
-    registerGraphTools(mockServer as never, {} as GraphClient, false);
+    registerGraphTools(mockServer as never, {} as GraphClient, { readOnly: false });
 
     const declarativeNames = mockServer.registerTool.mock.calls.map((call) => call[0]);
     const utilityNames = mockServer.tool.mock.calls.map((call) => call[0]);

@@ -31,20 +31,26 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
 
-      - name: Install patch-package (if needed)
-        run: npm i -D patch-package
-
       - name: Install dependencies
         run: npm ci
 
       - name: Generate
         run: npm run generate
 
+      - name: Check generated artifacts are up to date
+        run: git diff --exit-code
+
       - name: Lint code
         run: npm run lint
 
       - name: Check formatting
         run: npm run format:check
+
+      # tsup strips types without checking them, so build alone cannot catch type errors
+      # Node 18 skips the @azure/* optional deps (engines >=20), so tsc can't find them
+      - name: Type check
+        if: matrix.node-version != '18.x'
+        run: npm run typecheck
 
       - name: Build TypeScript
         run: npm run build

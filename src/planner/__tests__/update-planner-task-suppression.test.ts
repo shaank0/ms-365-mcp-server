@@ -61,7 +61,7 @@ describe('update-planner-task: a genuine, shipped collision', () => {
   it('registers exactly once, the registration is ours, and unrelated upstream tools are unaffected', () => {
     const mockServer = { tool: vi.fn(), registerTool: vi.fn() };
 
-    registerGraphTools(mockServer as never, {} as GraphClient, false);
+    registerGraphTools(mockServer as never, {} as GraphClient, { readOnly: false });
 
     const declarativeNames = mockServer.registerTool.mock.calls.map((call) => call[0]);
     const utilityCalls = mockServer.tool.mock.calls;

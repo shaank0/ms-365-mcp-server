@@ -19,7 +19,10 @@ const endpointEntries = JSON.parse(
 // which presets it belongs to via its `presets` array, so presets are exact
 // tool-name allow-lists that can't over-match across apps the way the old
 // loose name regexes could (e.g. "mail" also matching shared-mailbox tools).
-const PRESET_META: Record<string, { description: string; requiresOrgMode?: boolean }> = {
+const PRESET_META: Record<
+  string,
+  { description: string; requiresOrgMode?: boolean; omitUniversalUtilities?: boolean }
+> = {
   mail: {
     description: 'Email operations (read, send, manage folders, attachments)',
   },
@@ -66,6 +69,13 @@ const PRESET_META: Record<string, { description: string; requiresOrgMode?: boole
     description: 'Teams app only: chats, channels, meetings and presence',
     requiresOrgMode: true,
   },
+  'teams-write': {
+    description:
+      'Teams send-only: send/reply in chats and channels, list chats/teams/channels by name, activity notifications - no message reading',
+    requiresOrgMode: true,
+    // A write-only preset must not include the generic byte readers.
+    omitUniversalUtilities: true,
+  },
 };
 
 // Utility tools (graph-tools.ts UTILITY_TOOLS) are code-defined, not in endpoints.json, so they
@@ -79,23 +89,31 @@ const PRESET_META: Record<string, { description: string; requiresOrgMode?: boole
 // enumerated list because a list would silently miss apps and every future preset.
 const UNIVERSAL_UTILITY_TOOLS = ['download-bytes', 'download-bytes-to-file'];
 
-// Scoped utilities are only meaningful where the resources they act on appear. get-download-url
-// resolves a pre-authenticated URL for drive/SharePoint file content ONLY (not mail/event
-// attachments or recordings), so it rides with the drive-backed presets; where it is absent the
-// universal download-bytes still reads the bytes. parse-teams-url only parses Teams meeting URLs.
+// Scoped utilities are only meaningful where the resources they act on appear. Graph itself
+// publishes a pre-authenticated URL for drive/SharePoint file content ONLY (not mail/event
+// attachments or recordings), so get-download-url rides with the drive-backed presets; where it is
+// absent the universal download-bytes still reads the bytes. A server running with
+// --enable-attachment-urls mints its own URL for those other byte resources, so
+// getCombinedPresetPattern adds it to every preset then. parse-teams-url only parses Teams meeting
+// URLs.
+// read-mail-text reads mail, so it rides with the mail-backed presets.
 const SCOPED_UTILITY_TOOLS: Record<string, string[]> = {
   'get-download-url': ['files', 'onedrive', 'personal', 'work', 'search'],
-  'parse-teams-url': ['teams', 'work'],
-  // delete-planner-task, create-planner-plan and list-planner-plans are fork
-  // additions (src/planner/), not endpoints.json entries, so they need the
-  // same explicit preset membership as the other code-defined utility tools
-  // above. 'work' matches every sibling Planner endpoint in endpoints.json
-  // (list-planner-tasks, get-planner-plan, list-plan-tasks, get-planner-task,
-  // create-planner-task, update-planner-task all carry ["tasks","work"]) —
-  // without it, the work preset would surface every other Planner tool but
-  // silently omit these.
+  'get-upload-url': ['mail', 'calendar', 'outlook', 'personal', 'work'],
+  'upload-attachment-from-file': ['mail', 'calendar', 'outlook', 'personal', 'work'],
+  'parse-teams-url': ['teams', 'teams-write', 'work'],
+  'read-mail-text': ['mail', 'outlook', 'personal', 'work'],
+  // delete-planner-task and list-planner-plans are fork additions (src/planner/),
+  // not endpoints.json entries, so they need the same explicit preset membership
+  // as the other code-defined utility tools above. 'work' matches every sibling
+  // Planner endpoint in endpoints.json (list-planner-tasks, get-planner-plan,
+  // list-plan-tasks, get-planner-task, create-planner-task, update-planner-task
+  // all carry ["tasks","work"]) — without it, the work preset would surface every
+  // other Planner tool but silently omit these. The fork's other three overlays
+  // (create-planner-plan, create-planner-task, update-planner-task) replace
+  // upstream endpoints.json entries of the same name, so they inherit those
+  // entries' presets and need no line here.
   'delete-planner-task': ['tasks', 'work'],
-  'create-planner-plan': ['tasks', 'work'],
   'list-planner-plans': ['tasks', 'work'],
 };
 
@@ -111,7 +129,18 @@ for (const [tool, presets] of Object.entries(SCOPED_UTILITY_TOOLS)) {
   }
 }
 
-function presetPattern(preset: string): RegExp {
+/**
+ * Exact tool names unlocked by a named preset (endpoints.json membership plus
+ * utility-tool rules). Sorted for stable docs and tests. The `all` preset lists
+ * every endpoint tool plus every utility that belongs to at least one named preset.
+ */
+export function getToolsForPreset(preset: string): string[] {
+  if (preset === 'all') {
+    const endpointNames = [...new Set(endpointEntries.map((e) => e.toolName))];
+    const utilityNames = [...UNIVERSAL_UTILITY_TOOLS, ...Object.keys(SCOPED_UTILITY_TOOLS)];
+    return [...new Set([...endpointNames, ...utilityNames])].sort();
+  }
+
   const endpointNames = [
     ...new Set(endpointEntries.filter((e) => e.presets?.includes(preset)).map((e) => e.toolName)),
   ];
@@ -120,14 +149,19 @@ function presetPattern(preset: string): RegExp {
   if (endpointNames.length === 0) {
     throw new Error(`Preset "${preset}" matches no endpoints in endpoints.json`);
   }
-  const names = [
-    ...endpointNames,
-    ...UNIVERSAL_UTILITY_TOOLS,
-    ...Object.entries(SCOPED_UTILITY_TOOLS)
-      .filter(([, presets]) => presets.includes(preset))
-      .map(([name]) => name),
-  ];
-  return new RegExp(`^(?:${names.join('|')})$`);
+  return [
+    ...new Set([
+      ...endpointNames,
+      ...(PRESET_META[preset]?.omitUniversalUtilities ? [] : UNIVERSAL_UTILITY_TOOLS),
+      ...Object.entries(SCOPED_UTILITY_TOOLS)
+        .filter(([, presets]) => presets.includes(preset))
+        .map(([name]) => name),
+    ]),
+  ].sort();
+}
+
+function presetPattern(preset: string): RegExp {
+  return new RegExp(`^(?:${getToolsForPreset(preset).join('|')})$`);
 }
 
 export const TOOL_CATEGORIES: Record<string, ToolCategory> = {
@@ -144,7 +178,10 @@ export const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   },
 };
 
-export function getCombinedPresetPattern(presets: string[]): string {
+export function getCombinedPresetPattern(
+  presets: string[],
+  { attachmentUrls = false }: { attachmentUrls?: boolean } = {}
+): string {
   const patterns = presets.map((preset) => {
     const category = TOOL_CATEGORIES[preset];
     if (!category) {
@@ -154,6 +191,16 @@ export function getCombinedPresetPattern(presets: string[]): string {
     }
     return category.pattern.source;
   });
+  // With server-minted attachment URLs on, get-download-url is how an agent that found a mail or
+  // event attachment, recording or other $value resource gets a URL for it, so it must not depend
+  // on the preset having drive tools. Send-only presets stay free of byte readers.
+  if (
+    attachmentUrls &&
+    presets.some((p) => !PRESET_META[p]?.omitUniversalUtilities) &&
+    !patterns.some((p) => new RegExp(p).test('get-download-url'))
+  ) {
+    patterns.push('^get-download-url$');
+  }
   return patterns.join('|');
 }
 
@@ -162,11 +209,13 @@ export function listPresets(): Array<{
   description: string;
   requiresOrgMode?: boolean;
 }> {
-  return Object.values(TOOL_CATEGORIES).map((category) => ({
-    name: category.name,
-    description: category.description,
-    requiresOrgMode: category.requiresOrgMode,
-  }));
+  return Object.values(TOOL_CATEGORIES)
+    .map((category) => ({
+      name: category.name,
+      description: category.description,
+      requiresOrgMode: category.requiresOrgMode,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export function presetRequiresOrgMode(preset: string): boolean {

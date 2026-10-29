@@ -166,6 +166,96 @@
     "llmTip": "Forward a message from a shared mailbox preserving full HTML formatting and attachments. The 'user-id' is the shared mailbox email address. 'toRecipients' is required. The 'comment' field adds text above the forwarded content. Requires Send As permission on the shared mailbox in Exchange."
   },
   {
+    "pathPattern": "/users/{user-id}/messages/{message-id}/createReply",
+    "method": "post",
+    "toolName": "create-shared-mailbox-reply-draft",
+    "presets": ["work"],
+    "workScopes": ["Mail.ReadWrite.Shared"],
+    "llmTip": "Create a reply draft in a shared mailbox preserving thread metadata (conversationId, In-Reply-To, References). The 'user-id' is the shared mailbox email address (e.g. support@contoso.com). Does not send — use send-shared-mailbox-draft to send afterwards. For HTML replies pass Message.body.contentType: 'html' with Message.body.content as HTML. Specifying both 'comment' and Message.body returns 400. Requires delegated access to the shared mailbox."
+  },
+  {
+    "pathPattern": "/users/{user-id}/messages/{message-id}/createReplyAll",
+    "method": "post",
+    "toolName": "create-shared-mailbox-reply-all-draft",
+    "presets": ["work"],
+    "workScopes": ["Mail.ReadWrite.Shared"],
+    "llmTip": "Create a reply-all draft in a shared mailbox preserving thread metadata (conversationId, In-Reply-To, References). The 'user-id' is the shared mailbox email address. Does not send — use send-shared-mailbox-draft to send afterwards. For HTML replies pass Message.body.contentType: 'html' with Message.body.content as HTML. Specifying both 'comment' and Message.body returns 400. Requires delegated access to the shared mailbox."
+  },
+  {
+    "pathPattern": "/users/{user-id}/messages/{message-id}/createForward",
+    "method": "post",
+    "toolName": "create-shared-mailbox-forward-draft",
+    "presets": ["work"],
+    "workScopes": ["Mail.ReadWrite.Shared"],
+    "llmTip": "Create a forward draft in a shared mailbox without sending. The 'user-id' is the shared mailbox email address. Does not send — use send-shared-mailbox-draft to send afterwards. Useful when the user wants to review before the forward goes out. Requires delegated access to the shared mailbox."
+  },
+  {
+    "pathPattern": "/users/{user-id}/messages/{message-id}/send",
+    "method": "post",
+    "toolName": "send-shared-mailbox-draft",
+    "presets": ["work"],
+    "workScopes": ["Mail.Send.Shared"],
+    "llmTip": "Send an existing draft from a shared mailbox. No request body needed — just call with the message ID and the shared mailbox user-id. Draft must exist in the shared mailbox's Drafts folder. Requires Send As permission on the shared mailbox in Exchange."
+  },
+  {
+    "pathPattern": "/users/{user-id}/mailFolders",
+    "method": "get",
+    "toolName": "list-shared-mailbox-folders",
+    "descriptionOverride": "List the top-level mail folders in another user's mailbox or a shared mailbox. The user-id is the mailbox owner's ID or email address, and delegated access to that mailbox is required.",
+    "presets": ["work"],
+    "workScopes": ["Mail.Read.Shared"]
+  },
+  {
+    "pathPattern": "/users/{user-id}/mailFolders/{mailFolder-id}/childFolders",
+    "method": "get",
+    "toolName": "list-shared-mailbox-child-folders",
+    "descriptionOverride": "List the child folders of a mail folder in another user's mailbox or a shared mailbox. The user-id is the mailbox owner's ID or email address, and delegated access to that mailbox is required.",
+    "presets": ["work"],
+    "workScopes": ["Mail.Read.Shared"]
+  },
+  {
+    "pathPattern": "/users/{user-id}/mailFolders",
+    "method": "post",
+    "toolName": "create-shared-mailbox-folder",
+    "descriptionOverride": "Create a top-level mail folder in another user's mailbox or a shared mailbox. The user-id is the mailbox owner's ID or email address, and delegated access to that mailbox is required.",
+    "presets": ["work"],
+    "workScopes": ["Mail.ReadWrite.Shared"]
+  },
+  {
+    "pathPattern": "/users/{user-id}/mailFolders/{mailFolder-id}/childFolders",
+    "method": "post",
+    "toolName": "create-shared-mailbox-child-folder",
+    "descriptionOverride": "Create a subfolder inside a mail folder in another user's mailbox or a shared mailbox. The user-id is the mailbox owner's ID or email address, and delegated access to that mailbox is required.",
+    "presets": ["work"],
+    "workScopes": ["Mail.ReadWrite.Shared"]
+  },
+  {
+    "pathPattern": "/users/{user-id}/messages/{message-id}/attachments",
+    "method": "get",
+    "toolName": "list-shared-mailbox-attachments",
+    "descriptionOverride": "List the attachments on a message in another user's mailbox or a shared mailbox. The user-id is the mailbox owner's ID or email address, and delegated access to that mailbox is required.",
+    "presets": ["work"],
+    "workScopes": ["Mail.Read.Shared"],
+    "llmTip": "To download the bytes, call download-bytes or get-download-url with target=/users/{user-id}/messages/{message-id}/attachments/{attachment-id}/$value."
+  },
+  {
+    "pathPattern": "/users/{user-id}/messages/{message-id}/attachments",
+    "method": "post",
+    "toolName": "add-shared-mailbox-attachment",
+    "descriptionOverride": "Add an attachment under 3MB to a draft message in another user's mailbox or a shared mailbox. The user-id is the mailbox owner's ID or email address, and delegated access to that mailbox is required.",
+    "presets": ["work"],
+    "workScopes": ["Mail.ReadWrite.Shared"],
+    "llmTip": "Body requires @odata.type: {\"@odata.type\": \"#microsoft.graph.fileAttachment\", \"name\": \"file.pdf\", \"contentBytes\": \"<base64>\"}. Graph has no working path for 3MB and above here: upload sessions return 403 in a shared or delegated mailbox."
+  },
+  {
+    "pathPattern": "/users/{user-id}/messages/{message-id}/attachments/{attachment-id}",
+    "method": "delete",
+    "toolName": "delete-shared-mailbox-attachment",
+    "descriptionOverride": "Delete an attachment from a message in another user's mailbox or a shared mailbox. The user-id is the mailbox owner's ID or email address, and delegated access to that mailbox is required.",
+    "presets": ["work"],
+    "workScopes": ["Mail.ReadWrite.Shared"]
+  },
+  {
     "pathPattern": "/users",
     "method": "get",
     "toolName": "list-users",
@@ -212,7 +302,7 @@
     "toolName": "add-mail-attachment",
     "presets": ["mail", "outlook", "personal"],
     "scopes": ["Mail.ReadWrite"],
-    "llmTip": "Max 3MB. Body requires @odata.type: {\"@odata.type\": \"#microsoft.graph.fileAttachment\", \"name\": \"file.pdf\", \"contentBytes\": \"<base64>\"}."
+    "llmTip": "The only path for attachments under 3MB. contentBytes must carry the complete base64 verbatim; a truncated argument fails with 400 UnableToDeserializePostBody. At 3MB and above use create-mail-attachment-upload-session, which rejects anything smaller. Body requires @odata.type: {\"@odata.type\": \"#microsoft.graph.fileAttachment\", \"name\": \"file.pdf\", \"contentBytes\": \"<base64>\"}."
   },
   {
     "pathPattern": "/me/messages/{message-id}/attachments/createUploadSession",
@@ -220,7 +310,7 @@
     "toolName": "create-mail-attachment-upload-session",
     "presets": ["mail", "outlook", "personal"],
     "scopes": ["Mail.ReadWrite"],
-    "llmTip": "For large attachments (3-150MB). Body: { AttachmentItem: { attachmentType: 'file', name: 'report.pdf', size: 5000000 } }. Returns a pre-authenticated uploadUrl for direct PUT of file bytes."
+    "llmTip": "For attachments 3MB to 150MB. Graph rejects smaller files with ErrorAttachmentSizeShouldNotBeLessThanMinimumSize, so under 3MB use add-mail-attachment instead. Body: { AttachmentItem: { attachmentType: 'file', name: 'report.pdf', size: 5000000 } }. Returns a pre-authenticated uploadUrl; the caller PUTs the bytes there itself in ranges up to 4MB. This server does not perform the PUT."
   },
   {
     "pathPattern": "/me/messages/{message-id}/attachments",
@@ -382,7 +472,7 @@
     "toolName": "create-calendar-event",
     "presets": ["calendar", "outlook", "personal"],
     "scopes": ["Calendars.ReadWrite"],
-    "descriptionOverride": "Create (schedule) a new calendar event — a meeting or appointment — on the user's calendar. Set subject, start/end times, time zone, location, body, and attendees; supports online meetings and recurrence.",
+    "descriptionOverride": "Create (schedule) a new calendar event — a meeting or appointment — on the user's calendar. Times use nested objects, not flat fields: start: {dateTime, timeZone}, end: {dateTime, timeZone}. Do NOT use startDateTime/startTimeZone. For one-off events, UTC is simplest (e.g. 3:30 PM AEDT = 04:30 UTC). For recurring events, use the organizer's own time zone name instead — Graph resolves DST against the zone in start.timeZone, so UTC drifts after DST changes. Get the zone from get-mailbox-settings, or validate one with list-supported-time-zones instead of guessing from memory. Set subject, location, body, and attendees; supports online meetings and recurrence.",
     "llmTip": "CRITICAL: Do not try to guess the email address of the recipients. Use the list-users tool to find the email address of the recipients."
   },
   {
@@ -391,6 +481,7 @@
     "toolName": "update-calendar-event",
     "presets": ["calendar", "outlook", "personal"],
     "scopes": ["Calendars.ReadWrite"],
+    "descriptionOverride": "Update an event on the default calendar. Requires eventId (the event's ID from get-calendar-view or list-calendar-events). Times use nested {dateTime, timeZone} objects. UTC is simplest for one-off events; for recurring events use the organizer's own time zone (from get-mailbox-settings or list-supported-time-zones) instead of UTC, since Graph resolves DST against that zone.",
     "llmTip": "CRITICAL: Do not try to guess the email address of the recipients. Use the list-users tool to find the email address of the recipients. WARNING: Setting attendees replaces the entire attendee list — include all attendees, not just new ones."
   },
   {
@@ -452,6 +543,7 @@
     "toolName": "create-specific-calendar-event",
     "presets": ["calendar", "outlook", "personal"],
     "scopes": ["Calendars.ReadWrite"],
+    "descriptionOverride": "Create a calendar event on a specific calendar. Requires calendarId (the target calendar's ID). Times use nested {dateTime, timeZone} objects — do NOT use startDateTime/startTimeZone. UTC is simplest for one-off events; for recurring events use the organizer's own time zone (from get-mailbox-settings or list-supported-time-zones) instead of UTC, since Graph resolves DST against that zone.",
     "llmTip": "CRITICAL: Do not try to guess the email address of the recipients. Use the list-users tool to find the email address of the recipients."
   },
   {
@@ -460,6 +552,7 @@
     "toolName": "update-specific-calendar-event",
     "presets": ["calendar", "outlook", "personal"],
     "scopes": ["Calendars.ReadWrite"],
+    "descriptionOverride": "Update a specific calendar event. Requires calendarId (from list-calendars) and eventId (from list-specific-calendar-events or get-specific-calendar-view for that same calendar). Times use nested {dateTime, timeZone} objects. UTC is simplest for one-off events; for recurring events use the organizer's own time zone (from get-mailbox-settings or list-supported-time-zones) instead of UTC, since Graph resolves DST against that zone.",
     "llmTip": "CRITICAL: Do not try to guess the email address of the recipients. Use the list-users tool to find the email address of the recipients. WARNING: Setting attendees replaces the entire attendee list — include all attendees, not just new ones."
   },
   {
@@ -468,6 +561,7 @@
     "toolName": "delete-specific-calendar-event",
     "presets": ["calendar", "outlook", "personal"],
     "scopes": ["Calendars.ReadWrite"],
+    "descriptionOverride": "Delete a specific calendar event. Requires calendarId (the target calendar's ID) and eventId (the event's own ID).",
     "llmTip": "Deleting a seriesMaster deletes ALL occurrences. To cancel a single occurrence, use the specific instance ID."
   },
   {
@@ -478,7 +572,7 @@
     "scopes": ["Calendars.Read"],
     "supportsTimezone": true,
     "supportsExpandExtendedProperties": true,
-    "llmTip": "Returns expanded recurring event instances (not just seriesMaster) within a date range for the default calendar. Requires startDateTime and endDateTime query parameters in ISO 8601 format (e.g., 2024-01-01T00:00:00Z). Use get-specific-calendar-view if you need a non-default calendar. To find Teams meetings, use $filter=isOnlineMeeting eq true. To search by subject, use $filter=contains(subject,'keyword'). Teams meetings include a joinWebUrl property needed for transcript access via list-online-meetings."
+    "llmTip": "Returns expanded recurring event instances (not just seriesMaster) within a date range for the default calendar. Requires startDateTime and endDateTime query parameters in ISO 8601 format (e.g., 2024-01-01T00:00:00Z). Use get-specific-calendar-view if you need a non-default calendar. To find Teams meetings, use $select=subject,start,isOnlineMeeting,onlineMeetingProvider,onlineMeeting and keep the events with isOnlineMeeting true and onlineMeetingProvider teamsForBusiness; neither property is filterable (isOnlineMeeting returns 400 ErrorInvalidProperty). To search by subject, use $filter=contains(subject,'keyword'). Teams meetings expose their join link as onlineMeeting/joinUrl; the event resource has no joinWebUrl property. Pass that joinUrl to list-online-meetings as $filter=JoinWebUrl eq '{url}' to reach transcripts."
   },
   {
     "pathPattern": "/me/calendars/{calendar-id}/calendarView",
@@ -489,7 +583,7 @@
     "scopes": ["Calendars.Read"],
     "supportsTimezone": true,
     "supportsExpandExtendedProperties": true,
-    "llmTip": "Returns expanded recurring event instances (not just seriesMaster) within a date range for a specific calendar. Requires startDateTime and endDateTime query parameters in ISO 8601 format (e.g., 2024-01-01T00:00:00Z). Each instance includes seriesMasterId and type (occurrence/exception) fields for recurring event linkage. Use fetchAllPages=true to retrieve all results when there are many events. To find Teams meetings, use $filter=isOnlineMeeting eq true. Teams meetings include a joinWebUrl property needed for transcript access via list-online-meetings."
+    "llmTip": "Returns expanded recurring event instances (not just seriesMaster) within a date range for a specific calendar. Requires startDateTime and endDateTime query parameters in ISO 8601 format (e.g., 2024-01-01T00:00:00Z). Each instance includes seriesMasterId and type (occurrence/exception) fields for recurring event linkage. Use fetchAllPages=true to retrieve all results when there are many events. To find Teams meetings, use $select=subject,start,isOnlineMeeting,onlineMeetingProvider,onlineMeeting and keep the events with isOnlineMeeting true and onlineMeetingProvider teamsForBusiness; neither property is filterable (isOnlineMeeting returns 400 ErrorInvalidProperty). Teams meetings expose their join link as onlineMeeting/joinUrl; the event resource has no joinWebUrl property. Pass that joinUrl to list-online-meetings as $filter=JoinWebUrl eq '{url}' to reach transcripts."
   },
   {
     "pathPattern": "/me/calendar/getSchedule",
@@ -497,7 +591,8 @@
     "toolName": "get-schedule",
     "presets": ["calendar", "outlook", "personal"],
     "readOnly": true,
-    "workScopes": ["Calendars.Read"]
+    "workScopes": ["Calendars.Read"],
+    "supportsTimezone": true
   },
   {
     "pathPattern": "/users/{user-id}/calendar/events",
@@ -505,7 +600,8 @@
     "toolName": "list-shared-calendar-events",
     "descriptionOverride": "List events in another user's default calendar. The user-id is the calendar owner's ID or email address, and delegated access to that calendar is required. Recurring events are returned as a single series master, not expanded into occurrences - use get-shared-calendar-view for that.",
     "presets": ["work"],
-    "workScopes": ["Calendars.Read.Shared"]
+    "workScopes": ["Calendars.Read.Shared"],
+    "supportsTimezone": true
   },
   {
     "pathPattern": "/users/{user-id}/calendarView",
@@ -515,6 +611,33 @@
     "presets": ["work"],
     "workScopes": ["Calendars.Read.Shared"],
     "supportsTimezone": true
+  },
+  {
+    "pathPattern": "/users/{user-id}/calendar/events",
+    "method": "post",
+    "toolName": "create-shared-calendar-event",
+    "descriptionOverride": "Create an event in another user's default calendar. The user-id is the calendar owner's ID or email address, and delegated write access to that calendar is required. Times use nested objects, not flat fields: start: {dateTime, timeZone}, end: {dateTime, timeZone}. Do NOT use startDateTime/startTimeZone. For recurring events use the calendar owner's own time zone name rather than UTC, since Graph resolves DST against the zone in start.timeZone.",
+    "presets": ["work"],
+    "workScopes": ["Calendars.ReadWrite.Shared"],
+    "supportsTimezone": true
+  },
+  {
+    "pathPattern": "/users/{user-id}/events/{event-id}",
+    "method": "patch",
+    "toolName": "update-shared-calendar-event",
+    "descriptionOverride": "Update an event in another user's default calendar. Requires the calendar owner's user-id and the event's eventId from list-shared-calendar-events or get-shared-calendar-view. Times use nested {dateTime, timeZone} objects.",
+    "presets": ["work"],
+    "workScopes": ["Calendars.ReadWrite.Shared"],
+    "supportsTimezone": true
+  },
+  {
+    "pathPattern": "/users/{user-id}/events/{event-id}",
+    "method": "delete",
+    "toolName": "delete-shared-calendar-event",
+    "descriptionOverride": "Delete an event from another user's default calendar. Requires the calendar owner's user-id and the event's eventId from list-shared-calendar-events or get-shared-calendar-view.",
+    "llmTip": "Deleting a seriesMaster deletes ALL occurrences of the recurring event. If the owner organizes the meeting, deleting it sends a cancellation to the attendees.",
+    "presets": ["work"],
+    "workScopes": ["Calendars.ReadWrite.Shared"]
   },
   {
     "pathPattern": "/me/calendars/{calendar-id}/events/{event-id}/instances",
@@ -563,7 +686,8 @@
     "toolName": "find-meeting-times",
     "presets": ["calendar", "outlook", "personal"],
     "readOnly": true,
-    "workScopes": ["Calendars.Read.Shared"]
+    "workScopes": ["Calendars.Read.Shared"],
+    "supportsTimezone": true
   },
   {
     "pathPattern": "/me/drives",
@@ -585,14 +709,14 @@
     "method": "get",
     "toolName": "get-drive-root-item",
     "presets": ["files", "onedrive", "personal"],
-    "scopes": ["Files.Read"]
+    "scopes": [["Files.Read"], ["Sites.Selected"]]
   },
   {
     "pathPattern": "/drives/{drive-id}/items/{driveItem-id}/children",
     "method": "get",
     "toolName": "list-folder-files",
     "presets": ["files", "onedrive", "personal"],
-    "scopes": ["Files.Read"]
+    "scopes": [["Files.Read"], ["Sites.Selected"]]
   },
   {
     "pathPattern": "/drives/{drive-id}/items/{driveItem-id}",
@@ -606,23 +730,23 @@
     "method": "put",
     "toolName": "upload-file-content",
     "presets": ["files", "onedrive", "personal"],
-    "scopes": ["Files.ReadWrite"],
-    "llmTip": "Body is a base64-encoded string of the file bytes; the server decodes it before PUT. Max 4MB inline (use create-upload-session above 4MB). For new files use path format: /items/root:/path/to/file.txt:/content. Overwrites existing files without warning."
+    "scopes": [["Files.ReadWrite"], ["Sites.Selected"]],
+    "llmTip": "Body is a base64-encoded string of the file bytes; the server decodes it before PUT. Graph accepts up to 250MB here, but the whole string travels as a tool argument and a truncated one decodes to a truncated file with no error, so use create-upload-session rather than emitting a large base64 string. For new files use path format: /items/root:/path/to/file.txt:/content. Overwrites existing files without warning."
   },
   {
     "pathPattern": "/drives/{drive-id}/items/{driveItem-id}/createUploadSession",
     "method": "post",
     "toolName": "create-upload-session",
     "presets": ["files", "onedrive", "personal"],
-    "scopes": ["Files.ReadWrite"],
-    "llmTip": "For large file uploads (no size limit). Returns a pre-authenticated uploadUrl for direct PUT of file bytes. For new files use path: /items/{parentId}:/{fileName}:/createUploadSession. Body (optional): { item: { '@microsoft.graph.conflictBehavior': 'rename' } }."
+    "scopes": [["Files.ReadWrite"], ["Sites.Selected"]],
+    "llmTip": "For large file uploads (no size limit, and no minimum unlike the Outlook attachment session). Returns a pre-authenticated uploadUrl; the caller PUTs the bytes there itself. This server does not perform the PUT. For new files use path: /items/{parentId}:/{fileName}:/createUploadSession. Body (optional): { item: { '@microsoft.graph.conflictBehavior': 'rename' } }."
   },
   {
     "pathPattern": "/drives/{drive-id}/items/{driveItem-id}",
     "method": "get",
     "toolName": "get-drive-item",
     "presets": ["files", "onedrive", "personal"],
-    "scopes": ["Files.Read"],
+    "scopes": [["Files.Read"], ["Sites.Selected"]],
     "llmTip": "Gets metadata for a file or folder: name, size, lastModifiedDateTime, createdBy, webUrl, file (mimeType, hashes), folder (childCount), parentReference, and @microsoft.graph.downloadUrl. For large drive/SharePoint files, call get-download-url with target=/drives/{drive-id}/items/{driveItem-id}/content to fetch out-of-band with no Authorization header. For small files where base64 in the tool response is acceptable, call download-bytes with the same /content target."
   },
   {
@@ -630,7 +754,7 @@
     "method": "patch",
     "toolName": "move-rename-onedrive-item",
     "presets": ["files", "onedrive", "personal"],
-    "scopes": ["Files.ReadWrite"],
+    "scopes": [["Files.ReadWrite"], ["Sites.Selected"]],
     "llmTip": "Move and/or rename a file or folder. To move, provide parentReference with the target folder's id. To rename, provide a new name. Both can be done in a single request."
   },
   {
@@ -638,7 +762,7 @@
     "method": "post",
     "toolName": "create-onedrive-folder",
     "presets": ["files", "onedrive", "personal"],
-    "scopes": ["Files.ReadWrite"],
+    "scopes": [["Files.ReadWrite"], ["Sites.Selected"]],
     "llmTip": "Creates a new folder inside the specified drive item. Body must include name (string) and folder ({}) fields. Use @microsoft.graph.conflictBehavior to control behavior on name conflict: 'rename' (default), 'replace', or 'fail'."
   },
   {
@@ -662,7 +786,7 @@
     "method": "post",
     "toolName": "copy-drive-item",
     "presets": ["files", "onedrive", "personal"],
-    "scopes": ["Files.ReadWrite"],
+    "scopes": [["Files.ReadWrite"], ["Sites.Selected"]],
     "llmTip": "Asynchronously copy a file or folder to a new location and/or name. Body: { parentReference: { driveId: '...', id: '...' }, name?: 'New Name.xlsx' }. Returns 202 Accepted with a Location header pointing at a monitor URL for the async job. Ideal for duplicating templates (e.g. clone an Armhr Census Template per prospect), bulk file provisioning, or preserving an immutable snapshot of a working file."
   },
   {
@@ -702,7 +826,7 @@
     "method": "get",
     "toolName": "list-drive-item-versions",
     "presets": ["files", "onedrive", "personal"],
-    "scopes": ["Files.Read"],
+    "scopes": [["Files.Read"], ["Sites.Selected"]],
     "llmTip": "Lists version history of a file. Each version has id, lastModifiedDateTime, lastModifiedBy, and size. Use the version id with /versions/{id}/content to download a specific version."
   },
   {
@@ -848,11 +972,43 @@
     "pathPattern": "/me/messages/{message-id}/$value",
     "method": "get",
     "toolName": "get-mail-message-mime",
-    "descriptionOverride": "Download the raw MIME source (RFC 822 .eml content) of an Outlook email message by its message ID. Returns the complete original message including headers and encoded attachments.",
+    "descriptionOverride": "Download the raw MIME source (RFC 5322 .eml content) of an Outlook email message by its message ID. Returns the complete original message including headers and encoded attachments.",
     "presets": ["mail", "outlook", "personal"],
     "scopes": ["Mail.Read"],
     "acceptType": "text/plain",
+    "blobOutput": true,
     "llmTip": "Download an email message as raw RFC 5322 MIME content (.eml format). Use this when archiving an email to disk preserving all original headers, body, and inline-encoded attachments. Returns the MIME stream as text. Find the message id with list-mail-messages first."
+  },
+  {
+    "pathPattern": "/users/{user-id}/messages/{message-id}/$value",
+    "method": "get",
+    "toolName": "get-shared-mailbox-message-mime",
+    "descriptionOverride": "Download the raw MIME source (RFC 5322 .eml content) of a message in another user's mailbox or a shared mailbox, by message ID. The user-id is the mailbox owner's ID or email address, and delegated access to that mailbox is required.",
+    "presets": ["work"],
+    "workScopes": ["Mail.Read.Shared"],
+    "acceptType": "text/plain",
+    "blobOutput": true,
+    "llmTip": "Download a message of a shared mailbox as an .eml. Find the message id with list-shared-mailbox-messages first. With the server's blob output on, the bytes come back as a file resource; pass fileName to name it."
+  },
+  {
+    "pathPattern": "/me/messages/{message-id}/attachments/{attachment-id}/$value",
+    "method": "get",
+    "toolName": "get-mail-attachment-content",
+    "descriptionOverride": "Download the raw bytes of a file attachment of an Outlook message in the signed-in user's mailbox, by message ID and attachment ID.",
+    "presets": ["mail", "outlook", "personal"],
+    "scopes": ["Mail.Read"],
+    "blobOutput": true,
+    "llmTip": "Find the attachment id with list-mail-attachments first. With the server's blob output on, the bytes come back as a file resource; pass fileName (the attachment's name) to name it. Files over the server's download limit are refused with an error naming the limit."
+  },
+  {
+    "pathPattern": "/users/{user-id}/messages/{message-id}/attachments/{attachment-id}/$value",
+    "method": "get",
+    "toolName": "get-shared-mailbox-attachment-content",
+    "descriptionOverride": "Download the raw bytes of a file attachment of a message in another user's mailbox or a shared mailbox, by message ID and attachment ID. The user-id is the mailbox owner's ID or email address, and delegated access to that mailbox is required.",
+    "presets": ["work"],
+    "workScopes": ["Mail.Read.Shared"],
+    "blobOutput": true,
+    "llmTip": "Find the attachment id with list-shared-mailbox-attachments first. With the server's blob output on, the bytes come back as a file resource; pass fileName (the attachment's name) to name it. Files over the server's download limit are refused with an error naming the limit."
   },
   {
     "pathPattern": "/drives/{drive-id}/items/{driveItem-id}/workbook/worksheets/{workbookWorksheet-id}/range(address='{address}')",
@@ -1049,6 +1205,41 @@
     "scopes": ["Notes.Read"]
   },
   {
+    "pathPattern": "/me/onenote/pages/{onenotePage-id}/content",
+    "method": "patch",
+    "toolName": "update-onenote-page-content",
+    "presets": ["onenote", "personal"],
+    "scopes": ["Notes.ReadWrite"],
+    "requestBodySchema": {
+      "type": "array",
+      "description": "Array of patchContentCommand objects applied in order to the page's HTML.",
+      "items": {
+        "type": "object",
+        "required": ["target", "action"],
+        "properties": {
+          "target": {
+            "type": "string",
+            "description": "Element to change: a data-id, the generated id, or a known name like 'body' or 'title'."
+          },
+          "action": {
+            "type": "string",
+            "enum": ["append", "insert", "prepend", "replace", "delete"],
+            "description": "What to do at the target. 'delete' takes no content."
+          },
+          "position": {
+            "type": "string",
+            "enum": ["after", "before"],
+            "description": "For 'insert'/'append', whether content goes after (default) or before the target's content."
+          },
+          "content": {
+            "type": "string",
+            "description": "HTML to add. Required for all actions except 'delete'."
+          }
+        }
+      }
+    }
+  },
+  {
     "pathPattern": "/sites/{site-id}/onenote/notebooks",
     "method": "get",
     "toolName": "list-sharepoint-site-onenote-notebooks",
@@ -1201,7 +1392,16 @@
     "toolName": "list-todo-task-lists",
     "presets": ["personal", "tasks"],
     "scopes": ["Tasks.Read"],
-    "llmTip": "Lists all To Do task lists. Returns todoTaskList-id needed for all task operations. The default list is typically called 'Tasks'. NOTE: $select is NOT supported by this endpoint — do not pass select parameter, Graph returns 400."
+    "queryParams": ["top", "skip", "filter", "skiptoken"],
+    "llmTip": "If it returns only 'Flagged Emails', use list-todo-task-lists-delta instead."
+  },
+  {
+    "pathPattern": "/me/todo/lists/delta()",
+    "method": "get",
+    "toolName": "list-todo-task-lists-delta",
+    "presets": ["personal", "tasks"],
+    "scopes": ["Tasks.ReadWrite"],
+    "queryParams": ["select", "skiptoken"]
   },
   {
     "pathPattern": "/me/todo/lists/{todoTaskList-id}/tasks",
@@ -1209,7 +1409,8 @@
     "toolName": "list-todo-tasks",
     "presets": ["personal", "tasks"],
     "scopes": ["Tasks.Read"],
-    "llmTip": "Lists tasks in a To Do list. Requires todoTaskList-id — use list-todo-task-lists to find it. NOTE: $select is NOT supported — do not pass select, Graph returns 400. Use $filter=status eq 'notStarted' or $filter=status eq 'completed' to filter by status. Use $top to limit results. Status values: 'notStarted', 'inProgress', 'completed', 'waitingOnOthers', 'deferred'."
+    "queryParams": ["top", "skip", "filter", "orderby", "expand", "skiptoken"],
+    "llmTip": "Lists tasks in a To Do list. Requires todoTaskList-id — use list-todo-task-lists to find it. Use $filter=status eq 'notStarted' or $filter=status eq 'completed' to filter by status. Use $top to limit results. Status values: 'notStarted', 'inProgress', 'completed', 'waitingOnOthers', 'deferred'. $orderby works on createdDateTime, lastModifiedDateTime, importance, status and reminderDateTime/dateTime, not on title or isReminderOn. A $filter on isReminderOn can also return 400; filter it client-side."
   },
   {
     "pathPattern": "/me/todo/lists/{todoTaskList-id}/tasks/{todoTask-id}",
@@ -1217,7 +1418,8 @@
     "toolName": "get-todo-task",
     "presets": ["personal", "tasks"],
     "scopes": ["Tasks.Read"],
-    "llmTip": "Returns a single To Do task. NOTE: $select is NOT supported — do not pass select parameter, Graph returns RequestBroker--ParseUri (400). Use $expand=linkedResources to include linked email/resource. Returns body content (HTML format), checklist items, and linked resources."
+    "queryParams": ["expand"],
+    "llmTip": "Returns a single To Do task. Use $expand=linkedResources to include linked email/resource. Returns body content (HTML format), checklist items, and linked resources."
   },
   {
     "pathPattern": "/me/todo/lists/{todoTaskList-id}/tasks",
@@ -1225,7 +1427,7 @@
     "toolName": "create-todo-task",
     "presets": ["personal", "tasks"],
     "scopes": ["Tasks.ReadWrite"],
-    "llmTip": "Creates a new task in a Microsoft To Do list. Body: { title: \"...\" }; optional dueDateTime, reminderDateTime, importance, body (notes), recurrence, categories. Requires todoTaskListId from list-todo-task-lists."
+    "llmTip": "Creates a new task in a Microsoft To Do list. Body: { title: \"...\" }; optional dueDateTime, reminderDateTime, importance, body (notes), recurrence, categories, and checklistItems: [{ displayName: \"...\", isChecked: false }] to create the task's steps inline (isChecked is optional). Requires todoTaskListId from list-todo-task-lists. To change steps after the task exists, use the *-todo-checklist-item tools."
   },
   {
     "pathPattern": "/me/todo/lists/{todoTaskList-id}/tasks/{todoTask-id}",
@@ -1233,7 +1435,7 @@
     "toolName": "update-todo-task",
     "presets": ["personal", "tasks"],
     "scopes": ["Tasks.ReadWrite"],
-    "llmTip": "Updates a Microsoft To Do task. Use this to mark a to-do item complete or done (body: { status: \"completed\" }), reopen it (status: \"notStarted\"), rename it (title), or change its due date (dueDateTime), reminder (reminderDateTime), importance, or notes (body). Requires todoTaskListId from list-todo-task-lists and todoTaskId from list-todo-tasks."
+    "llmTip": "Updates a Microsoft To Do task. Use this to mark a to-do item complete or done (body: { status: \"completed\" }), reopen it (status: \"notStarted\"), rename it (title), or change its due date (dueDateTime), reminder (reminderDateTime), importance, or notes (body). Requires todoTaskListId from list-todo-task-lists and todoTaskId from list-todo-tasks. Steps (checklistItems) can't be changed here: Graph rejects checklistItems in a PATCH on the task with 400. Use create-todo-checklist-item, update-todo-checklist-item, or delete-todo-checklist-item instead."
   },
   {
     "pathPattern": "/me/todo/lists/{todoTaskList-id}/tasks/{todoTask-id}",
@@ -1248,6 +1450,7 @@
     "toolName": "list-todo-linked-resources",
     "presets": ["personal", "tasks"],
     "scopes": ["Tasks.Read"],
+    "queryParams": ["top", "skip", "filter", "orderby", "skiptoken"],
     "llmTip": "Lists resources linked to a To Do task (emails, URLs, etc.). Each linked resource has displayName, webUrl, applicationName, and externalId."
   },
   {
@@ -1267,12 +1470,45 @@
     "llmTip": "Removes a linked resource from a To Do task."
   },
   {
+    "pathPattern": "/me/todo/lists/{todoTaskList-id}/tasks/{todoTask-id}/checklistItems",
+    "method": "get",
+    "toolName": "list-todo-checklist-items",
+    "presets": ["personal", "tasks"],
+    "scopes": ["Tasks.Read"],
+    "queryParams": [],
+    "llmTip": "Lists the steps (checklist items) of a To Do task. Each item has id, displayName, isChecked, checkedDateTime, and createdDateTime. Requires todoTaskListId from list-todo-task-lists and todoTaskId from list-todo-tasks."
+  },
+  {
+    "pathPattern": "/me/todo/lists/{todoTaskList-id}/tasks/{todoTask-id}/checklistItems",
+    "method": "post",
+    "toolName": "create-todo-checklist-item",
+    "presets": ["personal", "tasks"],
+    "scopes": ["Tasks.ReadWrite"],
+    "llmTip": "Adds a step (checklist item) to an existing To Do task. Body: { displayName: \"...\" }; optional isChecked (defaults to false). Returns the new item with its id. To add steps while creating a task, pass checklistItems in the create-todo-task body instead."
+  },
+  {
+    "pathPattern": "/me/todo/lists/{todoTaskList-id}/tasks/{todoTask-id}/checklistItems/{checklistItem-id}",
+    "method": "patch",
+    "toolName": "update-todo-checklist-item",
+    "presets": ["personal", "tasks"],
+    "scopes": ["Tasks.ReadWrite"],
+    "llmTip": "Updates a step (checklist item) of a To Do task. Use this to check a step off (body: { isChecked: true }), uncheck it (isChecked: false), or rename it (displayName). Requires checklistItemId from list-todo-checklist-items."
+  },
+  {
+    "pathPattern": "/me/todo/lists/{todoTaskList-id}/tasks/{todoTask-id}/checklistItems/{checklistItem-id}",
+    "method": "delete",
+    "toolName": "delete-todo-checklist-item",
+    "presets": ["personal", "tasks"],
+    "scopes": ["Tasks.ReadWrite"],
+    "llmTip": "Deletes a step (checklist item) from a To Do task. This cannot be undone. Requires checklistItemId from list-todo-checklist-items."
+  },
+  {
     "pathPattern": "/me/planner/tasks",
     "method": "get",
     "toolName": "list-planner-tasks",
     "presets": ["tasks", "work"],
     "scopes": ["Tasks.Read"],
-    "llmTip": "Priority values: 0=Urgent, 1=Important, 3=Medium, 5=Low, 9=unset."
+    "llmTip": "Priority is 0-10 (lower = higher priority); Planner's own UI presets are 1=Urgent, 3=Important, 5=Medium, 9=Low."
   },
   {
     "pathPattern": "/planner/plans/{plannerPlan-id}",
@@ -1282,12 +1518,36 @@
     "scopes": ["Tasks.Read"]
   },
   {
+    "pathPattern": "/planner/plans",
+    "method": "post",
+    "toolName": "create-planner-plan",
+    "presets": ["tasks", "work"],
+    "scopes": ["Tasks.ReadWrite"],
+    "llmTip": "Body: {\"container\": {\"url\": \"https://graph.microsoft.com/v1.0/groups/{group-id}\"}, \"title\": \"...\"}. For a team, the group id is the team id. The signed-in user must be a member of the group. The container cannot be changed later. Returns the new plan id; to show the plan in a channel, add a Planner tab with create-channel-tab."
+  },
+  {
+    "pathPattern": "/planner/plans/{plannerPlan-id}",
+    "method": "patch",
+    "toolName": "update-planner-plan",
+    "presets": ["tasks", "work"],
+    "scopes": ["Tasks.ReadWrite"],
+    "llmTip": "CRITICAL: Requires If-Match header with ETag from get-planner-plan (use includeHeaders=true)."
+  },
+  {
+    "pathPattern": "/groups/{group-id}/planner/plans",
+    "method": "get",
+    "toolName": "list-group-planner-plans",
+    "presets": ["tasks", "work"],
+    "scopes": ["Tasks.Read"],
+    "llmTip": "Lists the plans owned by a Microsoft 365 group. For a team, the group id is the team id."
+  },
+  {
     "pathPattern": "/planner/plans/{plannerPlan-id}/tasks",
     "method": "get",
     "toolName": "list-plan-tasks",
     "presets": ["tasks", "work"],
     "scopes": ["Tasks.Read"],
-    "llmTip": "Priority values: 0=Urgent, 1=Important, 3=Medium, 5=Low, 9=unset."
+    "llmTip": "Priority is 0-10 (lower = higher priority); Planner's own UI presets are 1=Urgent, 3=Important, 5=Medium, 9=Low."
   },
   {
     "pathPattern": "/planner/tasks/{plannerTask-id}",
@@ -1310,7 +1570,7 @@
     "toolName": "update-planner-task",
     "presets": ["tasks", "work"],
     "scopes": ["Tasks.ReadWrite"],
-    "llmTip": "CRITICAL: Requires If-Match header with the task's @odata.etag value, otherwise returns 412 Precondition Failed. Get the ETag from get-planner-task with includeHeaders=true. Priority values: 0=Urgent, 1=Important, 3=Medium, 5=Low, 9=unset."
+    "llmTip": "CRITICAL: Requires If-Match header with the task's @odata.etag value, otherwise returns 412 Precondition Failed. Get the ETag from get-planner-task with includeHeaders=true. Priority is 0-10 (lower = higher priority); Planner's own UI presets are 1=Urgent, 3=Important, 5=Medium, 9=Low."
   },
   {
     "pathPattern": "/planner/tasks/{plannerTask-id}/details",
@@ -1497,7 +1757,7 @@
     "toolName": "list-relevant-people",
     "presets": ["users", "work"],
     "workScopes": ["People.Read"],
-    "llmTip": "Lists people most relevant to the current user, ordered by relevance. Based on communication patterns, collaboration, and business relationships. Each person has displayName, emailAddresses, jobTitle, department, officeLocation. Use $search to find specific people by name. Use $top to limit results."
+    "llmTip": "Lists people most relevant to the current user, ordered by relevance. Based on communication patterns, collaboration, and business relationships. Each person has displayName, scoredEmailAddresses, jobTitle, department, officeLocation. Use $search to find specific people by name. Use $top to limit results."
   },
   {
     "pathPattern": "/me/memberOf",
@@ -1559,15 +1819,17 @@
     "pathPattern": "/me/chats",
     "method": "get",
     "toolName": "list-chats",
-    "presets": ["teams", "work"],
-    "workScopes": [["Chat.Read"], ["Chat.ReadBasic"]]
+    "presets": ["teams", "teams-write", "work"],
+    "workScopes": ["Chat.ReadBasic"],
+    "maxTop": 50,
+    "llmTip": "Lists the signed-in user's chats. Only $filter, $top (max 50), $expand (members, lastMessagePreview) and $orderby are supported; $orderby accepts just lastMessagePreview/createdDateTime in descending order. Other options are rejected: $search returns 400 'Query option Search is not allowed', and ordering by lastUpdatedDateTime returns 400 BadRequest. Meeting chats have chatType=meeting and carry the meeting subject in topic."
   },
   {
     "pathPattern": "/chats/{chat-id}",
     "method": "get",
     "toolName": "get-chat",
-    "presets": ["teams", "work"],
-    "workScopes": [["Chat.Read"], ["Chat.ReadBasic"]]
+    "presets": ["teams", "teams-write", "work"],
+    "workScopes": ["Chat.ReadBasic"]
   },
   {
     "pathPattern": "/chats/{chat-id}/members",
@@ -1575,14 +1837,16 @@
     "toolName": "list-chat-members",
     "presets": ["teams", "work"],
     "workScopes": ["ChatMember.Read"],
-    "llmTip": "Lists members of a chat. Each member has displayName, email, roles (owner/guest), and visibleHistoryStartDateTime. For meeting chats, use the chatInfo.threadId from get-online-meeting as the chat-id to see who participated in the meeting chat."
+    "nameFilter": true,
+    "llmTip": "Lists members of a chat. Each member has displayName, email, roles (owner/guest), and visibleHistoryStartDateTime. For meeting chats, use the chatInfo.threadId from get-online-meeting as the chat-id to see who participated in the meeting chat. Pass name to keep only members whose displayName or email contains that text (case-insensitive); use the returned userId in an @mention."
   },
   {
     "pathPattern": "/chats/{chat-id}/messages",
     "method": "get",
     "toolName": "list-chat-messages",
     "presets": ["teams", "work"],
-    "workScopes": ["ChatMessage.Read"]
+    "workScopes": ["ChatMessage.Read"],
+    "llmTip": "Lists messages in a chat. $top is capped at 50 (higher values return 400) and $orderby accepts only descending order on createdDateTime or lastModifiedDateTime - ascending is rejected. Meeting chats mostly hold system events; transcripts are not available here, use list-meeting-transcripts instead."
   },
   {
     "pathPattern": "/chats/{chat-id}/messages/{chatMessage-id}",
@@ -1596,7 +1860,9 @@
     "method": "patch",
     "toolName": "update-chat-message",
     "presets": ["teams", "work"],
-    "workScopes": ["Chat.ReadWrite"]
+    "workScopes": ["Chat.ReadWrite"],
+    "mentionShorthand": true,
+    "llmTip": "To @mention someone, put <at user-id=\"<aad-user-id>\">Display Name</at> in the html content; the server numbers the tag and builds the mentions array. Use the userId field (not id) from list-team-members or list-chat-members. Use contentType html in the body."
   },
   {
     "pathPattern": "/chats/{chat-id}/messages/{chatMessage-id}/hostedContents",
@@ -1610,36 +1876,72 @@
     "pathPattern": "/chats/{chat-id}/messages",
     "method": "post",
     "toolName": "send-chat-message",
-    "presets": ["teams", "work"],
+    "presets": ["teams", "teams-write", "work"],
     "workScopes": ["ChatMessage.Send"],
-    "llmTip": "Use contentType 'html' in the body — plain text contentType gets mangled by Graph API. To @mention someone, put an <at id=\"0\">Name</at> tag in the html content and add a mentions array to the request body, as a sibling of the body property (not a separate top-level tool parameter): { body: { contentType: 'html', content: 'Hi <at id=\"0\">Name</at>' }, mentions: [{ id: 0, mentionText: 'Name', mentioned: { user: { id: '<aad-user-id>', displayName: 'Name', userIdentityType: 'aadUser' } } }] }. Each mention id must match its <at id> value; include userIdentityType: 'aadUser' or Graph returns 400 'value without a type name'."
+    "mentionShorthand": true,
+    "llmTip": "To @mention someone, put <at user-id=\"<aad-user-id>\">Display Name</at> in the html content; the server numbers the tag and builds the mentions array. Use the userId field (not id) from list-team-members or list-chat-members. Use contentType 'html' in the body — plain text contentType gets mangled by Graph API. Alternatively, hand-build the raw form: put an <at id=\"0\">Name</at> tag in the html content and add a mentions array to the request body, as a sibling of the body property (not a separate top-level tool parameter): { body: { contentType: 'html', content: 'Hi <at id=\"0\">Name</at>' }, mentions: [{ id: 0, mentionText: 'Name', mentioned: { user: { id: '<aad-user-id>', displayName: 'Name', userIdentityType: 'aadUser' } } }] }. Each mention id must match its <at id> value; include userIdentityType: 'aadUser' or Graph returns 400 'value without a type name'."
   },
   {
     "pathPattern": "/me/joinedTeams",
     "method": "get",
     "toolName": "list-joined-teams",
+    "presets": ["teams", "teams-write", "work"],
+    "workScopes": ["Team.ReadBasic.All"],
+    "queryParams": []
+  },
+  {
+    "pathPattern": "/teamwork/messaging/customEmojis",
+    "method": "get",
+    "toolName": "list-custom-emojis",
+    "apiVersion": "beta",
     "presets": ["teams", "work"],
-    "workScopes": ["Team.ReadBasic.All"]
+    "workScopes": ["TeamworkCustomEmoji.Read"],
+    "queryParams": ["top", "filter", "select", "skiptoken"],
+    "llmTip": "Lists the organization's custom Teams emojis, including displayName, createdBy and createdDateTime. Graph can return contentBytes: null by default; request select='displayName,contentBytes' (or a string array) to retrieve base64 PNG/GIF images. Supports $top, $filter and $select. Image bytes can make responses large: use a small $top when selecting contentBytes; use fetchAllPages only for an explicitly requested export. displayName is the unique key, not an id. Work/school accounts only. Microsoft Graph beta API: subject to change."
+  },
+  {
+    "pathPattern": "/teamwork/messaging/customEmojis",
+    "method": "post",
+    "toolName": "create-custom-emoji",
+    "apiVersion": "beta",
+    "presets": ["teams", "work"],
+    "workScopes": ["TeamworkCustomEmoji.Create"],
+    "requestBodySchema": {
+      "type": "object",
+      "required": ["displayName", "contentBytes"],
+      "properties": {
+        "displayName": {
+          "type": "string",
+          "description": "Exact unique custom emoji name, without surrounding colons. Must not conflict with an existing emoji name."
+        },
+        "contentBytes": {
+          "type": "string",
+          "description": "Base64-encoded PNG or GIF file content; do not include a data-URL prefix."
+        }
+      },
+      "additionalProperties": false
+    },
+    "llmTip": "Uploads a custom Teams emoji for the organization using body: { displayName, contentBytes }. Only PNG and GIF are supported; pass the complete image file as base64. Confirm the exact name and image with the user before creating it. Returns the created emoji, including its image bytes; use excludeResponse=true when only success/failure is needed. Work/school accounts only. Microsoft Graph beta API: subject to change."
   },
   {
     "pathPattern": "/teams/{team-id}",
     "method": "get",
     "toolName": "get-team",
-    "presets": ["teams", "work"],
+    "presets": ["teams", "teams-write", "work"],
     "workScopes": ["Team.ReadBasic.All"]
   },
   {
     "pathPattern": "/teams/{team-id}/channels",
     "method": "get",
     "toolName": "list-team-channels",
-    "presets": ["teams", "work"],
+    "presets": ["teams", "teams-write", "work"],
     "workScopes": ["Channel.ReadBasic.All"]
   },
   {
     "pathPattern": "/teams/{team-id}/channels/{channel-id}",
     "method": "get",
     "toolName": "get-team-channel",
-    "presets": ["teams", "work"],
+    "presets": ["teams", "teams-write", "work"],
     "workScopes": ["Channel.ReadBasic.All"]
   },
   {
@@ -1668,7 +1970,8 @@
     "method": "get",
     "toolName": "list-channel-messages",
     "presets": ["teams", "work"],
-    "workScopes": ["ChannelMessage.Read.All"]
+    "workScopes": ["ChannelMessage.Read.All"],
+    "queryParams": ["top", "expand", "skiptoken"]
   },
   {
     "pathPattern": "/teams/{team-id}/channels/{channel-id}/messages/{chatMessage-id}",
@@ -1682,7 +1985,9 @@
     "method": "patch",
     "toolName": "update-channel-message",
     "presets": ["teams", "work"],
-    "workScopes": ["ChannelMessage.ReadWrite"]
+    "workScopes": ["ChannelMessage.ReadWrite"],
+    "mentionShorthand": true,
+    "llmTip": "To @mention someone, put <at user-id=\"<aad-user-id>\">Display Name</at> in the html content; the server numbers the tag and builds the mentions array. Use the userId field (not id) from list-team-members or list-chat-members. Use contentType html in the body."
   },
   {
     "pathPattern": "/teams/{team-id}/channels/{channel-id}/messages/{chatMessage-id}/hostedContents",
@@ -1696,31 +2001,36 @@
     "pathPattern": "/teams/{team-id}/channels/{channel-id}/messages",
     "method": "post",
     "toolName": "send-channel-message",
-    "presets": ["teams", "work"],
+    "presets": ["teams", "teams-write", "work"],
     "workScopes": ["ChannelMessage.Send"],
-    "llmTip": "Use contentType 'html' in the body — plain text contentType gets mangled by Graph API. To @mention someone, put an <at id=\"0\">Name</at> tag in the html content and add a mentions array to the request body, as a sibling of the body property (not a separate top-level tool parameter): { body: { contentType: 'html', content: 'Hi <at id=\"0\">Name</at>' }, mentions: [{ id: 0, mentionText: 'Name', mentioned: { user: { id: '<aad-user-id>', displayName: 'Name', userIdentityType: 'aadUser' } } }] }. Each mention id must match its <at id> value; include userIdentityType: 'aadUser' or Graph returns 400 'value without a type name'."
+    "mentionShorthand": true,
+    "llmTip": "To @mention someone, put <at user-id=\"<aad-user-id>\">Display Name</at> in the html content; the server numbers the tag and builds the mentions array. Use the userId field (not id) from list-team-members or list-chat-members. Use contentType 'html' in the body — plain text contentType gets mangled by Graph API. Alternatively, hand-build the raw form: put an <at id=\"0\">Name</at> tag in the html content and add a mentions array to the request body, as a sibling of the body property (not a separate top-level tool parameter): { body: { contentType: 'html', content: 'Hi <at id=\"0\">Name</at>' }, mentions: [{ id: 0, mentionText: 'Name', mentioned: { user: { id: '<aad-user-id>', displayName: 'Name', userIdentityType: 'aadUser' } } }] }. Each mention id must match its <at id> value; include userIdentityType: 'aadUser' or Graph returns 400 'value without a type name'."
   },
   {
     "pathPattern": "/teams/{team-id}/channels/{channel-id}/messages/{chatMessage-id}/replies",
     "method": "post",
     "toolName": "reply-to-channel-message",
-    "presets": ["teams", "work"],
+    "presets": ["teams", "teams-write", "work"],
     "workScopes": ["ChannelMessage.Send"],
-    "llmTip": "Use contentType 'html' in the body — plain text contentType gets mangled by Graph API. To @mention someone, put an <at id=\"0\">Name</at> tag in the html content and add a mentions array to the request body, as a sibling of the body property (not a separate top-level tool parameter): { body: { contentType: 'html', content: 'Hi <at id=\"0\">Name</at>' }, mentions: [{ id: 0, mentionText: 'Name', mentioned: { user: { id: '<aad-user-id>', displayName: 'Name', userIdentityType: 'aadUser' } } }] }. Each mention id must match its <at id> value; include userIdentityType: 'aadUser' or Graph returns 400 'value without a type name'."
+    "mentionShorthand": true,
+    "llmTip": "To @mention someone, put <at user-id=\"<aad-user-id>\">Display Name</at> in the html content; the server numbers the tag and builds the mentions array. Use the userId field (not id) from list-team-members or list-chat-members. Use contentType 'html' in the body — plain text contentType gets mangled by Graph API. Alternatively, hand-build the raw form: put an <at id=\"0\">Name</at> tag in the html content and add a mentions array to the request body, as a sibling of the body property (not a separate top-level tool parameter): { body: { contentType: 'html', content: 'Hi <at id=\"0\">Name</at>' }, mentions: [{ id: 0, mentionText: 'Name', mentioned: { user: { id: '<aad-user-id>', displayName: 'Name', userIdentityType: 'aadUser' } } }] }. Each mention id must match its <at id> value; include userIdentityType: 'aadUser' or Graph returns 400 'value without a type name'."
   },
   {
     "pathPattern": "/teams/{team-id}/channels/{channel-id}/messages/{chatMessage-id}/replies",
     "method": "get",
     "toolName": "list-channel-message-replies",
     "presets": ["teams", "work"],
-    "workScopes": ["ChannelMessage.Read.All"]
+    "workScopes": ["ChannelMessage.Read.All"],
+    "queryParams": ["top", "skiptoken"]
   },
   {
     "pathPattern": "/teams/{team-id}/channels/{channel-id}/messages/{chatMessage-id}/replies/{chatMessage-id1}",
     "method": "patch",
     "toolName": "update-channel-message-reply",
     "presets": ["teams", "work"],
-    "workScopes": ["ChannelMessage.ReadWrite"]
+    "workScopes": ["ChannelMessage.ReadWrite"],
+    "mentionShorthand": true,
+    "llmTip": "To @mention someone, put <at user-id=\"<aad-user-id>\">Display Name</at> in the html content; the server numbers the tag and builds the mentions array. Use the userId field (not id) from list-team-members or list-chat-members. Use contentType html in the body."
   },
   {
     "pathPattern": "/teams/{team-id}/members",
@@ -1744,6 +2054,14 @@
     "workScopes": ["TeamsTab.Read.All"]
   },
   {
+    "pathPattern": "/teams/{team-id}/channels/{channel-id}/tabs",
+    "method": "post",
+    "toolName": "create-channel-tab",
+    "presets": ["teams", "work"],
+    "workScopes": ["TeamsTab.Create"],
+    "llmTip": "Body: {\"displayName\": \"...\", \"teamsApp@odata.bind\": \"https://graph.microsoft.com/v1.0/appCatalogs/teamsApps/{teamsAppId}\", \"configuration\": {\"entityId\": ..., \"contentUrl\": ..., \"websiteUrl\": ..., \"removeUrl\": ...}}. Built-in app ids: website com.microsoft.teamspace.tab.web, document library com.microsoft.teamspace.tab.files.sharepoint, Planner com.microsoft.teamspace.tab.planner (see https://learn.microsoft.com/graph/teams-configuring-builtin-tabs). Planner tab for a basic plan (create it first with create-planner-plan): entityId \"planner.v1.{new-guid}_p_{planId}\"; contentUrl \"https://tasks.teams.microsoft.com/teamsui/{tid}/Home/PlannerFrame?page=7&auth_pvr=OrgId&auth_upn={userPrincipalName}&groupId={groupId}&planRoute=/v1/plan/{planId}&subEntityId={subEntityId}&channelId={channelId}&entityId={entityId}&tid={tid}&userObjectId={userObjectId}&sessionId={sessionId}&theme={theme}&mkt={locale}&ringId={ringId}&PlannerRouteHint={tid}&tabVersion=20200228.1_s\"; removeUrl the same with page=13; websiteUrl \"https://planner.cloud.microsoft/webui/v1/plan/{planId}?tid={tenantId}\". Replace only {planId}, {new-guid} and {tenantId} with real values; every other {placeholder} must stay literal, Teams fills it in. A tasks.office.com URL or a missing placeholder renders an error inside the tab."
+  },
+  {
     "pathPattern": "/teams/{team-id}/channels/{channel-id}/messages/{chatMessage-id}/setReaction",
     "method": "post",
     "toolName": "set-channel-message-reaction",
@@ -1762,7 +2080,9 @@
     "method": "get",
     "toolName": "list-team-members",
     "presets": ["teams", "work"],
-    "workScopes": ["TeamMember.Read.All"]
+    "workScopes": ["TeamMember.Read.All"],
+    "nameFilter": true,
+    "llmTip": "Lists members of a team. Each member has displayName, email, roles and userId. Pass name to keep only members whose displayName or email contains that text (case-insensitive); use the returned userId in an @mention."
   },
   {
     "pathPattern": "/teams/{team-id}/channels/{channel-id}/filesFolder",
@@ -1785,7 +2105,8 @@
     "toolName": "reply-to-chat-message",
     "presets": ["teams", "work"],
     "workScopes": ["ChatMessage.Send"],
-    "llmTip": "Use contentType 'html' in the body — plain text contentType gets mangled by Graph API. To @mention someone, put an <at id=\"0\">Name</at> tag in the html content and add a mentions array to the request body, as a sibling of the body property (not a separate top-level tool parameter): { body: { contentType: 'html', content: 'Hi <at id=\"0\">Name</at>' }, mentions: [{ id: 0, mentionText: 'Name', mentioned: { user: { id: '<aad-user-id>', displayName: 'Name', userIdentityType: 'aadUser' } } }] }. Each mention id must match its <at id> value; include userIdentityType: 'aadUser' or Graph returns 400 'value without a type name'."
+    "mentionShorthand": true,
+    "llmTip": "To @mention someone, put <at user-id=\"<aad-user-id>\">Display Name</at> in the html content; the server numbers the tag and builds the mentions array. Use the userId field (not id) from list-team-members or list-chat-members. Use contentType 'html' in the body — plain text contentType gets mangled by Graph API. Alternatively, hand-build the raw form: put an <at id=\"0\">Name</at> tag in the html content and add a mentions array to the request body, as a sibling of the body property (not a separate top-level tool parameter): { body: { contentType: 'html', content: 'Hi <at id=\"0\">Name</at>' }, mentions: [{ id: 0, mentionText: 'Name', mentioned: { user: { id: '<aad-user-id>', displayName: 'Name', userIdentityType: 'aadUser' } } }] }. Each mention id must match its <at id> value; include userIdentityType: 'aadUser' or Graph returns 400 'value without a type name'."
   },
   {
     "pathPattern": "/chats/{chat-id}/messages/{chatMessage-id}/setReaction",
@@ -1893,6 +2214,28 @@
     "presets": ["work"],
     "workScopes": [["Sites.Read.All"], ["Sites.Selected"]],
     "llmTip": "Add $expand=fields to include actual column values. Without it, only metadata is returned."
+  },
+  {
+    "pathPattern": "/sites/{site-id}/lists/{list-id}/items/delta()",
+    "method": "get",
+    "toolName": "list-sharepoint-site-list-items-delta",
+    "presets": ["work"],
+    "workScopes": [["Sites.Read.All"], ["Sites.Selected"]],
+    "queryParams": ["select", "expand", "top"]
+  },
+  {
+    "pathPattern": "/sites/{site-id}/lists/{list-id}/items/{listItem-id}/versions",
+    "method": "get",
+    "toolName": "list-sharepoint-site-list-item-versions",
+    "presets": ["work"],
+    "workScopes": [["Sites.Read.All"], ["Sites.Selected"]]
+  },
+  {
+    "pathPattern": "/sites/{site-id}/lists/{list-id}/items/{listItem-id}/versions/{listItemVersion-id}",
+    "method": "get",
+    "toolName": "get-sharepoint-site-list-item-version",
+    "presets": ["work"],
+    "workScopes": [["Sites.Read.All"], ["Sites.Selected"]]
   },
   {
     "pathPattern": "/sites/{site-id}/lists/{list-id}/items",
@@ -2047,7 +2390,7 @@
     "toolName": "list-online-meetings",
     "presets": ["teams", "work"],
     "workScopes": ["OnlineMeetings.Read"],
-    "llmTip": "List online meetings. Use $filter=joinWebUrl eq '{url}' to find a specific meeting by its Teams join link. Returns meeting IDs needed for transcript access."
+    "llmTip": "Look up a meeting with $filter=JoinWebUrl eq '{url}', using the joinUrl from an event's onlineMeeting property. This filter is required: the collection cannot be listed or paged, and $search/$orderby are not supported. Without it Graph returns 400 InvalidArgument ('One of the required parameters to lookup meeting by QueryOptions is null or empty'). Returns the meeting ID needed for transcript access. The full meeting object is large and can include the invite HTML and the meeting passcode, so pass select=id,subject,joinWebUrl unless you need more."
   },
   {
     "pathPattern": "/me/onlineMeetings/{onlineMeeting-id}",
@@ -2055,7 +2398,7 @@
     "toolName": "get-online-meeting",
     "presets": ["teams", "work"],
     "workScopes": ["OnlineMeetings.Read"],
-    "llmTip": "Gets a specific online meeting by ID. Returns full details including subject, startDateTime, endDateTime, joinWebUrl, chatInfo (threadId for meeting chat), participants (organizer, attendees), lobbyBypassSettings, and videoTeleconferenceId. Use list-online-meetings first to find the meeting ID."
+    "llmTip": "Gets a specific online meeting by ID. Returns full details including subject, startDateTime, endDateTime, joinWebUrl, chatInfo (threadId for meeting chat), participants (organizer, attendees), lobbyBypassSettings, and videoTeleconferenceId. Use list-online-meetings first to find the meeting ID. The full meeting object is large and can include the invite HTML and the meeting passcode, so pass select with the fields you came here for, e.g. select=id,chatInfo,participants."
   },
   {
     "pathPattern": "/me/onlineMeetings",
@@ -2063,7 +2406,7 @@
     "toolName": "create-online-meeting",
     "presets": ["teams", "work"],
     "workScopes": ["OnlineMeetings.ReadWrite"],
-    "llmTip": "Creates a new online meeting. Required body: { subject, startDateTime, endDateTime }. Optional: participants (with organizer and attendees), lobbyBypassSettings, isEntryExitAnnounced, allowedPresenters (everyone/organization/roleIsPresenter/organizer). Returns the created meeting with joinWebUrl and meeting ID."
+    "llmTip": "Creates a new online meeting. Required body: { subject, endDateTime }. startDateTime is not documented as required, but is commonly supplied. Optional: participants (with organizer and attendees), lobbyBypassSettings, isEntryExitAnnounced, allowedPresenters (everyone/organization/roleIsPresenter/organizer). Returns the created meeting with joinWebUrl and meeting ID."
   },
   {
     "pathPattern": "/me/onlineMeetings/{onlineMeeting-id}",
@@ -2105,6 +2448,24 @@
     "workScopes": ["OnlineMeetingTranscript.Read.All"],
     "acceptType": "text/vtt",
     "llmTip": "Returns the transcript content in WebVTT format with speaker identification and timestamps."
+  },
+  {
+    "pathPattern": "/me/adhocCalls/getAllTranscripts(userId='{userId}',startDateTime={startDateTime},endDateTime={endDateTime})",
+    "method": "get",
+    "toolName": "list-adhoc-call-transcripts",
+    "presets": ["teams", "work"],
+    "workScopes": ["CallTranscripts.Read.All"],
+    "skipEncoding": ["startDateTime", "endDateTime"],
+    "llmTip": "Lists transcripts of ad hoc calls (PSTN, 1:1 and group calls) started by the signed-in user. Use this for calls that have no calendar event and no online meeting, e.g. recordings named 'Anruf mit ...'. userId must be the signed-in user's object id (from get-current-user), not an email. startDateTime and endDateTime are required ISO 8601 UTC timestamps such as 2026-08-01T00:00:00Z. Each item carries callId and id (the transcript id) for get-adhoc-call-transcript-content; contentCorrelationId ends with the yyyyMMdd_HHmmss stamp that also appears in the recording file name in OneDrive. Do not use $filter, $orderby or $top."
+  },
+  {
+    "pathPattern": "/me/adhocCalls/{adhocCall-id}/transcripts/{callTranscript-id}/content",
+    "method": "get",
+    "toolName": "get-adhoc-call-transcript-content",
+    "presets": ["teams", "work"],
+    "workScopes": ["CallTranscripts.Read.All"],
+    "acceptType": "text/vtt",
+    "llmTip": "Returns the transcript of an ad hoc call as WebVTT with speaker tags and timestamps. Take adhocCallId (the callId) and callTranscriptId (the id) from list-adhoc-call-transcripts; copy both exactly. On 403 SpeakerAttributionNotAllowed retry with Accept set to application/vnd.microsoft.graph.transcript+text."
   },
   {
     "pathPattern": "/me/onlineMeetings/{onlineMeeting-id}/recordings",
@@ -2174,6 +2535,7 @@
     "pathPattern": "/groups/{group-id}/threads/{conversationThread-id}/reply",
     "method": "post",
     "toolName": "reply-to-group-thread",
+    "descriptionOverride": "Reply to a conversation thread in a Microsoft 365 group, adding a new post to the thread. Use list-group-threads to obtain the thread ID.",
     "presets": ["work"],
     "workScopes": ["Group.ReadWrite.All"],
     "llmTip": "Legacy — Microsoft recommends Teams channels instead of group threads."
@@ -2303,12 +2665,29 @@
     "llmTip": "Dismisses a triggered event reminder so it won't re-fire. No request body required. Pair with list-calendar-events or get-schedule to find active reminders."
   },
   {
+    "pathPattern": "/me/events/{event-id}/attachments",
+    "method": "post",
+    "toolName": "add-calendar-event-attachment",
+    "presets": ["calendar", "outlook", "personal"],
+    "scopes": ["Calendars.ReadWrite"],
+    "llmTip": "Under 3MB only. Body requires @odata.type: {\"@odata.type\": \"#microsoft.graph.fileAttachment\", \"name\": \"file.pdf\", \"contentBytes\": \"<base64>\"}. At 3MB and above use create-calendar-event-attachment-upload-session."
+  },
+  {
+    "pathPattern": "/me/events/{event-id}/attachments/createUploadSession",
+    "method": "post",
+    "toolName": "create-calendar-event-attachment-upload-session",
+    "presets": ["calendar", "outlook", "personal"],
+    "scopes": ["Calendars.ReadWrite"],
+    "llmTip": "For attachments 3MB to 150MB; under 3MB use add-calendar-event-attachment. Body: { AttachmentItem: { attachmentType: 'file', name: 'report.pdf', size: 5000000 } }. Returns a pre-authenticated uploadUrl; the caller PUTs the bytes there itself in ranges up to 4MB."
+  },
+  {
     "pathPattern": "/me/events/delta()",
     "method": "get",
     "toolName": "list-calendar-events-delta",
     "presets": ["calendar", "outlook", "personal"],
     "scopes": ["Calendars.Read"],
-    "llmTip": "Incremental sync of events across the default calendar. First call returns all events plus @odata.deltaLink. Subsequent calls with that link return only additions/updates/removals. Use $select to limit fields. Deltas expire after ~30 days — start over if the server returns 410 Gone. For a time-bounded view with delta semantics, use list-calendar-view-delta instead."
+    "queryParams": ["startDateTime", "skiptoken"],
+    "llmTip": "Incremental sync of events across the default calendar. First call returns all events plus @odata.deltaLink. Subsequent calls with that link return only additions/updates/removals. Deltas expire after ~30 days — start over if the server returns 410 Gone. For a time-bounded view with delta semantics, use list-calendar-view-delta instead."
   },
   {
     "pathPattern": "/me/calendarView/delta()",
@@ -2316,6 +2695,8 @@
     "toolName": "list-calendar-view-delta",
     "presets": ["calendar", "outlook", "personal"],
     "scopes": ["Calendars.Read"],
+    "supportsTimezone": true,
+    "queryParams": ["startDateTime", "endDateTime", "skiptoken"],
     "llmTip": "Incremental sync of events within a time window. Required query params on first call: startDateTime, endDateTime (ISO 8601). Returns events in the window plus @odata.deltaLink; subsequent calls with that link return only changes. Expands recurring events to individual occurrences (unlike list-calendar-events-delta which returns the series master). Use this for calendar UIs showing a week/month view."
   },
   {
@@ -2496,7 +2877,7 @@
     "toolName": "list-supported-time-zones",
     "presets": ["calendar", "mail", "outlook", "personal"],
     "scopes": ["User.Read"],
-    "llmTip": "Lists time zones the user's mailbox server supports. TimeZoneStandard path parameter must be one of: Windows (default — Windows time zone names like 'Pacific Standard Time'), or Iana (IANA / Olson names like 'America/Los_Angeles'). Note the PascalCase — the values are case-sensitive enums, not lowercase strings. Returns timeZoneInformation objects with alias and displayName. Use the result to validate or look up the value before calling update-mailbox-settings to change the user's preferred timeZone — the format must match what the server expects."
+    "llmTip": "Lists time zones the user's mailbox server supports. TimeZoneStandard path parameter must be one of: Windows (default — Windows time zone names like 'Pacific Standard Time'), or Iana (IANA / Olson names like 'America/Los_Angeles'). Note the PascalCase — the values are case-sensitive enums, not lowercase strings. Returns timeZoneInformation objects with alias and displayName. Use the result to validate or look up the value before calling update-mailbox-settings to change the user's preferred timeZone, or before setting timeZone on a calendar event's start/end (especially for recurring events) — don't guess a time zone name from memory, look it up here."
   },
   {
     "pathPattern": "/me/outlook/supportedLanguages()",
@@ -2609,7 +2990,7 @@
     "presets": ["personal"],
     "scopes": ["User.ReadWrite"],
     "contentType": "image/jpeg",
-    "llmTip": "Uploads a new profile photo for the signed-in user. Body is a base64-encoded string of the image bytes (the server decodes before PUT). Photo must be JPEG, max 4 MB. Microsoft 365 generates HD downsized variants automatically (48x48, 64x64, 96x96, 120x120, 240x240, 360x360, 432x432, 504x504, 648x648). For work or school accounts, ProfilePhoto.ReadWrite.All is the more granular alternative permission. Use download-bytes with target=/me/photo/$value to retrieve the current photo."
+    "llmTip": "Uploads a new profile photo for the signed-in user. Body is a base64-encoded string of the image bytes (the server decodes before PUT). Photo must be JPEG, max 4 MB; the base64 travels as a tool argument and a truncated one is written without error, so resize before encoding instead of emitting a large string. Microsoft 365 generates HD downsized variants automatically (48x48, 64x64, 96x96, 120x120, 240x240, 360x360, 432x432, 504x504, 648x648). For work or school accounts, ProfilePhoto.ReadWrite.All is the more granular alternative permission. Use download-bytes with target=/me/photo/$value to retrieve the current photo."
   },
   {
     "pathPattern": "/me/todo/lists",
@@ -2712,6 +3093,7 @@
     "toolName": "list-my-associated-teams",
     "presets": ["teams", "work"],
     "workScopes": ["Team.ReadBasic.All"],
+    "queryParams": [],
     "llmTip": "Lists Teams the current user is associated with — both joined teams and host teams of shared channels the user is a direct member of. Returns associatedTeamInfo objects with id, displayName, and tenantId. Broader than list-joined-teams because it includes shared-channel host teams."
   },
   {
@@ -2726,7 +3108,7 @@
     "pathPattern": "/me/teamwork/sendActivityNotification",
     "method": "post",
     "toolName": "send-my-activity-notification",
-    "presets": ["teams", "work"],
+    "presets": ["teams", "teams-write", "work"],
     "workScopes": ["TeamsActivity.Send"],
     "contentType": "application/json",
     "llmTip": "Sends a Teams activity feed notification to the current user (the badge + entry in their Activity tab). Body: { topic: { source: 'entityUrl' | 'text', value: <Graph URL or plain text>, webUrl: <required when source='text', click-through URL> }, activityType: <must be declared in the calling Teams app's manifest, OR the reserved 'systemDefault' which provides free-form Actor+Reason text>, previewText: { content: 'short preview' }, templateParameters?: [{ name, value }] (substituted into the manifest's localized notification template), teamsAppId?: <optional disambiguator when multiple installed apps share a Microsoft Entra app ID — fetch via list-my-installed-teams-apps>, chainId?, iconId? }. Use to ping the user with 'action required' notifications from agentic workflows. See https://learn.microsoft.com/graph/teams-send-activityfeednotifications."
